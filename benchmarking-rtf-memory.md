@@ -3,8 +3,48 @@
 **Product:** TrulyHandsfree (THF) / TrulyNatural (TNL) SDK  
 **Models:** Voice Genie wake word + Automotive STT pipeline  
 **Version:** 7.6.1 / 7.7.0 / 7.8.0+  
+**Document Version:** 1.0.0  
 **Audience:** Field Application Engineers, Customer Integration Engineers  
-**Status:** Draft
+**Status:** Released under NDA — Do not distribute
+
+*Copyright © 2026 Sensory Inc. All rights reserved. This document is confidential and proprietary to Sensory Inc. It may not be reproduced, distributed, or disclosed to any third party without prior written permission from Sensory Inc.*
+
+---
+
+## Table of Contents
+
+1. [Overview](#1-overview)
+   - [Real-Time Factor (RTF)](#real-time-factor-rtf)
+   - [Real-Time Requirements by Technology Type](#real-time-requirements-by-technology-type)
+   - [Memory Usage](#memory-usage)
+2. [Prerequisites](#2-prerequisites)
+   - [2.1 Test Platform](#21-test-platform)
+   - [2.2 SDK Installation](#22-sdk-installation)
+   - [2.3 Model Files](#23-model-files)
+   - [2.4 Test Audio Files](#24-test-audio-files)
+3. [Step 1 — Assemble the Pipeline Model](#3-step-1--assemble-the-pipeline-model)
+4. [Step 2 — Run snsr-eval with Pipeline Profiling](#4-step-2--run-snsr-eval-with-pipeline-profiling)
+   - [4.1 Profiling Flags](#41-profiling-flags)
+   - [4.2 Basic Profiling Command](#42-basic-profiling-command)
+   - [4.3 Reading Audio from stdin](#43-reading-audio-from-stdin)
+   - [4.4 Basic Profiling Output Format (-p)](#44-basic-profiling-output-format--p)
+   - [4.5 The Effect of Partial Results on RTF](#45-the-effect-of-partial-results-on-rtf)
+   - [4.6 Detailed Per-Element Profiling with -pp (Advanced)](#46-detailed-per-element-profiling-with--pp-advanced)
+5. [Step 3 — Measuring Worst-Case Memory Usage with Valgrind](#5-step-3--measuring-worst-case-memory-usage-with-valgrind)
+   - [5.1 Running the Massif Profiler](#51-running-the-massif-profiler)
+   - [5.2 Reading the Results](#52-reading-the-results)
+   - [5.3 Benchmark Results (Raspberry Pi 4, SDK 7.8.0)](#53-benchmark-results-raspberry-pi-4-sdk-780)
+   - [5.4 Reducing Heap Usage by Embedding the Model in Code Space](#54-reducing-heap-usage-by-embedding-the-model-in-code-space)
+6. [Step 4 — Average MIPS, RTF, and Memory for Continuous Wake Word Listening](#6-step-4--average-mips-rtf-and-memory-for-continuous-wake-word-listening)
+   - [6.1 The Noise Test File](#61-the-noise-test-file)
+   - [6.2 Average RTF Measurement](#62-average-rtf-measurement)
+   - [6.3 Average MIPS Measurement with perf stat](#63-average-mips-measurement-with-perf-stat)
+   - [6.4 Average Memory Measurement](#64-average-memory-measurement)
+   - [6.5 Benchmark Results (Raspberry Pi 4 8 GB, SDK 7.8.0)](#65-benchmark-results-raspberry-pi-4-8-gb-sdk-780)
+7. [Platform Notes: ARM NEON Extensions](#7-platform-notes-arm-neon-extensions)
+8. [Pipeline Architecture Reference](#8-pipeline-architecture-reference)
+9. [Quick Reference — Command Summary](#9-quick-reference--command-summary)
+10. [References](#10-references)
 
 ---
 
@@ -46,14 +86,20 @@ This guide covers two distinct memory measurements:
 
 ## 2. Prerequisites
 
-### 2.1 SDK Installation
+### 2.1 Test Platform
+
+Benchmarks in this guide were performed on a **Raspberry Pi 4** running Raspberry Pi OS (64-bit). The Pi 4 was chosen as the reference platform because it is widely available, inexpensive, and highly standardized — benchmarks run on one Pi 4 should be repeatable on any other. It also includes ARM NEON SIMD support (see Section 7), making it representative of the class of embedded ARM platforms targeted by Sensory's automotive and IoT customers.
+
+A **Raspberry Pi 4 or later** is recommended for reproducing the results in this guide.
+
+### 2.2 SDK Installation
 
 Ensure the TNL SDK 7.7.0+ is installed and the following are accessible on your PATH:
 
 - `snsr-eval` — model evaluation / profiling tool
 - `snsr-edit` — model pipeline assembly tool
 
-### 2.2 Model Files
+### 2.3 Model Files
 
 The following model files from the SDK distribution are used in this guide:
 
@@ -65,7 +111,7 @@ The following model files from the SDK distribution are used in this guide:
 
 By convention, model files are found under `model/` in the SDK installation directory.
 
-### 2.3 Test Audio Files
+### 2.4 Test Audio Files
 
 For reproducible RTF measurements, use **pre-recorded WAV files** rather than live audio. This eliminates audio capture jitter and allows the same utterances to be re-run identically across platforms.
 
