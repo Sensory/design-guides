@@ -32,6 +32,7 @@
    - [5.1 Loading and Running an Enrolled Model](#51-loading-and-running-an-enrolled-model)
    - [5.2 Reading Results](#52-reading-results)
    - [5.3 Combining Fixed and Enrolled Models](#53-combining-fixed-and-enrolled-models)
+   - [5.4 Biometric Scoring: THF/TNL vs. THF-Micro](#54-biometric-scoring-thftnl-vs-thf-micro)
 6. [Converting to a Deeply Embedded Model](#6-converting-to-a-deeply-embedded-model)
 7. [Design Guidelines](#7-design-guidelines)
    - [7.1 Recording Quality and Environment](#71-recording-quality-and-environment)
@@ -51,12 +52,12 @@ This guide explains how to create and use **enrolled models** with the Sensory T
 
 ### What Is an Enrolled Model?
 
-An enrolled model is a wake word or command that has been trained (**enrolled**) from a small number of recordings (usually 4) by a specific speaker, rather than a "works for anyone" pre-trained model for general population (fixed wake word) model. Because it is trained on one speaker's voice, an enrolled model works best — and, for biometric or speaker ID use cases, is intended to work *only* — for the person who enrolled it.
+An enrolled model is a wake word or command model that has been trained (**enrolled**) from a small number of recordings — usually four — by a specific speaker, rather than shipped pre-trained to work for the general population, like a fixed wake word model. Because it is trained on one speaker's voice, an enrolled model works best — and, for biometric or speaker ID use cases, is intended to work *only* — for the person who enrolled it.
 
 Enrolled models are used for three related purposes:
 
 - **Custom wake words and commands** — letting an end user define their own trigger phrase rather than being limited to a phrase fixed at build time.
-- **Speaker identification** - identifying one of a number of enrolled users without necessarily doing biometric security
+- **Speaker identification** — identifying which of a number of enrolled users is speaking, without necessarily enforcing biometric security.
 - **Voice biometrics (speaker verification)** — confirming that the speaker is who they claim to be, in addition to recognizing the phrase.
 
 ### Enroller Models vs. Enrolled Models
@@ -220,11 +221,11 @@ The `spot-enroll` and `live-enroll` tools are thin wrappers around the same SDK 
 | Key | Type | Description |
 |---|---|---|
 | `user` | string | Tag for the current enrollment — a unique alphanumeric identifier, no spaces. Use `user/phrase` (one `/`) to enroll multiple phrases per user. |
-| `req-enroll` | int | Required number of recording per enrollment. In interactive mode the user will be prompted to say the target phrase until the number is reached. |
+| `req-enroll` | int | Required number of recordings per enrollment — adaptation will not take place until at least this many recordings have been accepted. In interactive mode the user is prompted to repeat the phrase until the number is reached. |
 | `accuracy` | double, 0.0–1.0 | Trades enrollment speed for enrolled-model accuracy; higher is more accurate but slower to enroll. Default `1.0`. |
-| `ctx-enroll` | int | Recommended number of enrollments that should include trailing context speech (see [4.2](#42-recording-guidelines)). |
+| `ctx-enroll` | int | Recommended number of recordings that should include trailing context speech (see [4.2](#42-recording-guidelines)). |
 | `interactive` | int | `0` processes the stream to completion (offline mode); nonzero enables interactive re-recording of failed attempts. |
-| `enrollment-task-index` | int | Selects which sub-task receives enrollments, for multi-task enrollment models. Default `0`. |
+| `enrollment-task-index` | int | Selects which sub-task receives recordings, for multi-task enrollment models. Default `0`. |
 | `delete-user` | string | Removes the named user from a loaded context model. |
 | `save-enroll-audio` | int | `1` retains raw enrollment recordings in a saved context model; `0` (default) discards them. See [7.3](#73-security-considerations). |
 
@@ -298,19 +299,33 @@ The recognizer raises a `^result` event when a final recognition hypothesis is a
 | `id` | Identifier of the matched phrase/user |
 | `text` | Recognized phrase text |
 | `score` / `confidence-score` | Recognition confidence |
-| `sv-score` | Speaker verification score — present for enrolled models trained with biometric security; use this to accept/reject based on speaker identity, not just phrase match |
+| `sv-score` | Speaker verification score, present for enrolled models trained with biometric security. On THF/TNL, a `^result` firing already reflects the configured `sv-threshold` (see [5.4](#54-biometric-scoring-thftnl-vs-thf-micro)) |
 | `begin-ms` / `end-ms`, `begin-sample` / `end-sample` | Timing of the matched utterance |
 | `noise-energy` / `signal-energy` / `snr` | Audio quality metrics for the matched segment |
 | `domain` | NLU domain, if applicable |
 | `phone-iterator` / `phrase-iterator` / `word-iterator` | Iterators over sub-word recognition detail |
 
-> **Design guidance:** For a biometric deployment in a deeply embedded platform (THF-Micro), don't treat a `^result` event as authentication on its own — check `sv-score` against an application-specific threshold in addition to the phrase match. See [7.5 Testing an Enrolled Model](#75-testing-an-enrolled-model) for how to choose that threshold.
+> **Design guidance:** On THF/TNL, don't re-implement threshold logic in application code — set `sv-threshold` on the session and let the SDK enforce it (see [5.4](#54-biometric-scoring-thftnl-vs-thf-micro)). THF-Micro works differently and requires an explicit check; see the same section.
 
 Related VAD/timing events (`^begin`, `^end`, `^limit`, `^silence`) fire during recognition the same way they do for any wake word or command task and can be used for endpointing/UX feedback independent of the final result.
 
 ### 5.3 Combining Fixed and Enrolled Models
 
 It is possible to **concurrently combine** a fixed model (recognizes anyone) and an enrolled model (recognizes a specific speaker) — even for the same target phrase. In this configuration, the enrolled speaker is matched by both the fixed and enrolled models, while any other speaker is matched only by the fixed model. This is a common pattern for adding an optional "recognize me specifically" tier on top of baseline recognition that works for everyone.
+
+### 5.4 Biometric Scoring: THF/TNL vs. THF-Micro
+
+Speaker verification scoring is enforced differently depending on which Sensory runtime is evaluating the enrolled model, and this matters for where you put your threshold-checking code.
+
+| | THF / TNL | THF-Micro |
+|---|---|---|
+| **Threshold setting** | `sv-threshold`, set on the session before running | `SvThreshold`, a field of the recognizer's configuration struct (`t2siStruct`) |
+| **Score range** | Floating point, `0.0`–`1.0` | Integer, `0`–`8192` (THF-Micro is integer-only — no floating point) |
+| **Enforcement** | Internal. Results scoring below `sv-threshold` are filtered by the SDK and never raise `^result` — a fired event already means the speaker passed verification | None. THF-Micro always returns `svScore` on the `RecoResult` struct; comparing it against `SvThreshold` is the application's responsibility |
+
+> **Important:** Because THF/TNL enforces `sv-threshold` internally, application code does **not** need to re-check `sv-score` on a `^result` event — that check has already happened. On THF-Micro, the opposite is true: your application **must** compare `svScore` to `SvThreshold` itself before treating a match as verified, or biometric security will silently be a no-op.
+
+Confirm exact field names, struct layout, and default threshold behavior against your installed THF-Micro SDK version — see the full THF-Micro documentation at https://doc.sensory.com/thf-micro/latest/.
 
 ---
 
@@ -355,7 +370,7 @@ When validating an enrolled model, measure all three of the following, not just 
 
 - **False reject rate (FRR)** — how often the enrolled speaker, saying the correct phrase, is *not* recognized.
 - **False accept rate (FAR)** — how often a phrase is recognized when it should have been rejected.
-- **Imposter accept rate (IAR)** — how often a *different* speaker is incorrectly accepted as the enrolled speaker. This is the metric that matters most for biometric deployments and should drive your `sv-score` threshold (see [5.2](#52-reading-results)).
+- **Imposter accept rate (IAR)** — how often a *different* speaker is incorrectly accepted as the enrolled speaker. This is the metric that matters most for biometric deployments and should drive your `sv-threshold` (THF/TNL) or `SvThreshold` (THF-Micro) setting — see [5.4](#54-biometric-scoring-thftnl-vs-thf-micro).
 
 ### 7.6 Common Pitfalls
 
@@ -363,7 +378,7 @@ When validating an enrolled model, measure all three of the following, not just 
 - Enrolling in a noisy room and then being surprised by poor real-world accuracy.
 - Skipping context recordings for phrases prone to co-articulation, then seeing inconsistent endpointing in production.
 - Leaving `save-enroll-audio=1` set in a shipped configuration, unintentionally persisting raw voice recordings.
-- Treating a `^result` phrase match alone as sufficient for authentication in a biometric flow, instead of also checking `sv-score`.
+- Porting a THF/TNL biometric integration to THF-Micro without adding an explicit `svScore`/`SvThreshold` check — THF-Micro doesn't enforce the threshold internally the way THF/TNL does, so the check silently becomes a no-op (see [5.4](#54-biometric-scoring-thftnl-vs-thf-micro)).
 
 ---
 
@@ -407,4 +422,5 @@ snsr-edit -c user1-model.c -t user1.snsr
 - Inference & I/O API: https://doc.sensory.com/tnl/7.8/api/inference/
 - Setting keys reference: https://doc.sensory.com/tnl/7.8/api/setting-keys/
 - Runtime event keys: https://doc.sensory.com/tnl/7.8/api/setting-keys/events/
+- THF-Micro Docs: https://doc.sensory.com/thf-micro/latest/
 - [Benchmarking RTF and Avg/Max Memory Usage](benchmarking-rtf-memory.md) — for measuring enrolled-model runtime cost and embedding models in code space
