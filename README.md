@@ -18,4 +18,14 @@ How to measure real-time factor (RTF), MIPS, and memory usage for Sensory THF/TN
 
 ---
 
+### [Creating and Using Enrolled Models](enrolled-models.md)
+
+How to create and use enrolled models with Sensory THF/TNL — training custom user-defined wake words/commands or voice-biometric models from a speaker's own recordings via `spot-enroll` and `live-enroll`, adapting context models, enrolling programmatically via the SDK API, and using an enrolled model at runtime (including combining it with a fixed model and converting it to a deeply embedded model for low-power targets).
+
+**Applies to:** TrulyHandsfree (THF), TrulyNatural (TNL) SDKs — THF 5.x+ / TNL 7.6.1 / 7.7.0 / 7.8.0+
+**Platform:** All THF/TNL-supported platforms (on-device enrollment only — no cloud enrollment for THF)
+**Models used:** Enrollment task models (`udt-*.snsr`, `eft-*.snsr`) and their resulting enrolled models
+
+---
+
 *For questions or access requests, contact your Sensory FAE.*
