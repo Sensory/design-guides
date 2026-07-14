@@ -1,8 +1,8 @@
 # Creating and Using Enrolled Models with Sensory TrulyHandsfree/TrulyNatural
 
-**Product:** TrulyHandsfree (THF) / TrulyNatural (TNL) SDK
+**Product:** TrulyHandsfree (THF) and TrulyNatural (TNL) SDKs
 **Models:** Enrollment task models (`udt-*.snsr`, `eft-*.snsr`) and the enrolled models they produce
-**Version:** THF 5.x+ / TNL 7.6.1 / 7.7.0 / 7.8.0+
+**Version:** THF / TNL 6+, 7+
 **Document Version:** 1.0.0
 **Audience:** External developers and integration partners
 **Status:** Released under NDA — Do not distribute
@@ -47,15 +47,16 @@
 
 ## 1. Overview
 
-This guide explains how to create and use **enrolled models** with the Sensory TrulyHandsfree (THF) and TrulyNatural (TNL) SDKs — models that are trained to a specific person's voice, either to enable custom user-defined wake words and commands or to perform voice biometric verification.
+This guide explains how to create and use **enrolled models** with the Sensory TrulyHandsfree (THF) and TrulyNatural (TNL) SDKs — models that are trained to a specific person's voice, either to enable custom user-defined wake words and commands or to perform voice biometric verification and/or speaker identification (ID).
 
 ### What Is an Enrolled Model?
 
-An enrolled model is a wake word or command model that has been trained (**enrolled**) from a small number of recordings of a specific speaker, rather than shipped pre-trained for the general population like a fixed wake word model. Because it is trained on one speaker's voice, an enrolled model works best — and, for biometric use cases, is intended to work *only* — for the person who enrolled it.
+An enrolled model is a wake word or command that has been trained (**enrolled**) from a small number of recordings (usually 4) by a specific speaker, rather than a "works for anyone" pre-trained model for general population (fixed wake word) model. Because it is trained on one speaker's voice, an enrolled model works best — and, for biometric or speaker ID use cases, is intended to work *only* — for the person who enrolled it.
 
-Enrolled models are used for two related purposes:
+Enrolled models are used for three related purposes:
 
 - **Custom wake words and commands** — letting an end user define their own trigger phrase rather than being limited to a phrase fixed at build time.
+- **Speaker identification** - identifying one of a number of enrolled users without necessarily doing biometric security
 - **Voice biometrics (speaker verification)** — confirming that the speaker is who they claim to be, in addition to recognizing the phrase.
 
 ### Enroller Models vs. Enrolled Models
@@ -69,7 +70,7 @@ It's important not to confuse these two distinct model types:
 
 ### Why Enroll a Model?
 
-Fixed models work identically for every speaker and are set at build time. Enrollment trades that generality for personalization: an end user can define their own wake phrase on-device, or an application can restrict recognition — and optionally verified identity — to a specific enrolled speaker. This is a two-step, entirely on-device process; Sensory does not offer a hosted/cloud enrollment service for THF.
+Fixed models work identically for every speaker and are set at build time. Enrollment trades that generality for personalization: an end user can define their own wake phrase on-device, or an application can restrict recognition — and optionally verify identity — to a specific enrolled speaker. This is a two-step, entirely on-device process; Sensory does not offer a hosted/cloud enrollment service for THF, nor are recordings uploaded to the cloud.
 
 ---
 
@@ -97,7 +98,7 @@ In user-defined enrollment, the target phrase is **not known in advance** — th
 
 In enrolled-fixed enrollment, the target phrase is **known in advance** and hard-coded into the enroller model — only that phrase can be enrolled; anything else is ignored. Newer enrolled-fixed enroller models internally combine a fixed wake word phrase spotter with the enroller to detect the start and end of the utterance, rather than relying solely on a VAD. This makes enrolled-fixed enrollment inherently more noise-robust, giving better endpointing and a more accurate enrolled model — but it is still good practice to minimize background noise during recording.
 
-> **Design guidance:** Enrolled-fixed technology is **not recommended for voice biometrics**. Because the target phrase is known in advance, an attacker knows exactly which phrase to attempt to spoof. Use user-defined enrollment for biometric use cases.
+> **Design guidance:** Enrolled-fixed technology is **not recommended for critical system voice biometrics**. Because the target phrase is known in advance, an attacker knows exactly which phrase to attempt to spoof. Use user-defined enrollment for biometric use cases.
 
 ---
 
@@ -219,7 +220,7 @@ The `spot-enroll` and `live-enroll` tools are thin wrappers around the same SDK 
 | Key | Type | Description |
 |---|---|---|
 | `user` | string | Tag for the current enrollment — a unique alphanumeric identifier, no spaces. Use `user/phrase` (one `/`) to enroll multiple phrases per user. |
-| `req-enroll` | int | Recommended number of enrollments per user. Using more or fewer than recommended reduces spotter performance. |
+| `req-enroll` | int | Required number of recording per enrollment. In interactive mode the user will be prompted to say the target phrase until the number is reached. |
 | `accuracy` | double, 0.0–1.0 | Trades enrollment speed for enrolled-model accuracy; higher is more accurate but slower to enroll. Default `1.0`. |
 | `ctx-enroll` | int | Recommended number of enrollments that should include trailing context speech (see [4.2](#42-recording-guidelines)). |
 | `interactive` | int | `0` processes the stream to completion (offline mode); nonzero enables interactive re-recording of failed attempts. |
@@ -274,7 +275,7 @@ snsrRelease(s);
 
 ### 5.1 Loading and Running an Enrolled Model
 
-At runtime, an enrolled model is used exactly like a fixed wake word or command model — it is a self-contained recognizer. Load it into a session, register a result handler, and push audio:
+At runtime, an enrolled model is used exactly like a fixed wake word or command model — it is a self-contained recognizer. Load it into a session, register a result handler, and run the session (in pull mode):
 
 ```c
 SnsrSession s;
@@ -303,7 +304,7 @@ The recognizer raises a `^result` event when a final recognition hypothesis is a
 | `domain` | NLU domain, if applicable |
 | `phone-iterator` / `phrase-iterator` / `word-iterator` | Iterators over sub-word recognition detail |
 
-> **Design guidance:** For a biometric deployment, don't treat a `^result` event as authentication on its own — check `sv-score` against an application-specific threshold in addition to the phrase match. See [7.5 Testing an Enrolled Model](#75-testing-an-enrolled-model) for how to choose that threshold.
+> **Design guidance:** For a biometric deployment in a deeply embedded platform (THF-Micro), don't treat a `^result` event as authentication on its own — check `sv-score` against an application-specific threshold in addition to the phrase match. See [7.5 Testing an Enrolled Model](#75-testing-an-enrolled-model) for how to choose that threshold.
 
 Related VAD/timing events (`^begin`, `^end`, `^limit`, `^silence`) fire during recognition the same way they do for any wake word or command task and can be used for endpointing/UX feedback independent of the final result.
 
