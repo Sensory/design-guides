@@ -21,6 +21,7 @@
 3. [Enrollment Types](#3-enrollment-types)
    - [3.1 User-Defined Enrollment](#31-user-defined-enrollment)
    - [3.2 Enrolled-Fixed Enrollment](#32-enrolled-fixed-enrollment)
+   - [3.3 Simulated Enrolled-Fixed Enrollment (SEFW)](#33-simulated-enrolled-fixed-enrollment-sefw)
 4. [Enrolling a Model](#4-enrolling-a-model)
    - [4.1 The Two-Step Enrollment Process](#41-the-two-step-enrollment-process)
    - [4.2 Recording Guidelines](#42-recording-guidelines)
@@ -80,7 +81,7 @@ Fixed models work identically for every speaker and are set at build time. Enrol
 - TrulyHandsfree or TrulyNatural SDK installed, with the following tools accessible on your `PATH`:
   - `spot-enroll` — offline enrollment from pre-recorded audio
   - `live-enroll` — interactive enrollment from a live microphone
-- An **enroller task model**, distributed with the SDK (e.g. `udt-enUS-5.1.1.9.snsr` for user-defined enrollment, or an enrolled-fixed task model for a phrase known at build time).
+- An **enroller task model**, distributed with the SDK (e.g. `udt-enUS-5.1.1.9.snsr` for user-defined enrollment, or an enrolled-fixed task model for a phrase known at build time) — or, for a simulated enrolled-fixed (SEFW) model, a VoiceHub wake word project and Sensory FAE assistance to build it (see [3.3](#33-simulated-enrolled-fixed-enrollment-sefw)).
 - Audio recordings of the target speaker, if enrolling offline: 16-bit PCM WAV, recorded in a quiet environment (see [4.2 Recording Guidelines](#42-recording-guidelines)).
 
 > **Note:** Enrollment is on-device. Recordings and the resulting enrolled model never need to leave the local system, though some deployments do transfer the *recordings* to a more powerful machine to run the enroller there before shipping the resulting enrolled model back to the device — see [7.4 CPU and Memory Budgeting](#74-cpu-and-memory-budgeting).
@@ -89,7 +90,7 @@ Fixed models work identically for every speaker and are set at build time. Enrol
 
 ## 3. Enrollment Types
 
-Sensory supports two enrollment types, selected by which enroller task model you use.
+Sensory supports three enrollment types: two selected by which enroller task model you use — **user-defined (UDW)** and **enrolled-fixed (EFW)** — plus a hybrid, **simulated enrolled-fixed (SEFW)**, built by combining the two.
 
 ### 3.1 User-Defined Enrollment
 
@@ -100,6 +101,24 @@ In user-defined enrollment, the target phrase is **not known in advance** — th
 In enrolled-fixed enrollment, the target phrase is **known in advance** and hard-coded into the enroller model — only that phrase can be enrolled; anything else is ignored. Newer enrolled-fixed enroller models internally combine a fixed wake word phrase spotter with the enroller to detect the start and end of the utterance, rather than relying solely on a VAD. This makes enrolled-fixed enrollment inherently more noise-robust, giving better endpointing and a more accurate enrolled model — but it is still good practice to minimize background noise during recording.
 
 > **Design guidance:** Enrolled-fixed technology is **not recommended for critical system voice biometrics**. Because the target phrase is known in advance, an attacker knows exactly which phrase to attempt to spoof. Use user-defined enrollment for biometric use cases.
+
+### 3.3 Simulated Enrolled-Fixed Enrollment (SEFW)
+
+A **Simulated EFW (SEFW)** is a hybrid: from the end user's perspective it behaves like enrolled-fixed enrollment — only one specific phrase can ever be enrolled — but it's built on top of user-defined (UDW) enrollment technology rather than a purpose-built enrolled-fixed enroller model.
+
+**How it's built:**
+
+1. Create a wake word project for the target phrase in **VoiceHub**, Sensory's model-authoring portal.
+2. Download the resulting fixed wake word (FW) model from that project and combine it with a UDW enroller model. The result is technically still a UDW enroller, but restricted to only accept recordings of the exact target phrase defined in the VoiceHub job.
+
+> **Note:** As of this writing, combining a FW model with a UDW enroller to produce a SEFW model can only be done by a Sensory FAE — it isn't yet a self-service step for developers, though Sensory is working to remove this limitation. It's an option where a development or support agreement is in place; ask your FAE to build the SEFW model for you.
+
+**Without FAE involvement**, you can approximate the same restriction two ways:
+
+- **UI-level:** Enroll normally with a standard UDW enroller model, and instruct the user (in your application's UI) to say the specific target phrase during enrollment. Nothing at the model level prevents a different phrase from being enrolled — the restriction is enforced only by what you ask the user to say.
+- **Application-code level:** Run fixed wake word (FW) recognition on the incoming audio first, and only forward audio to the UDW enroller when the FW model actually fires on the target phrase. This restricts what gets enrolled without requiring a combined SEFW model.
+
+Once built (by either path), a SEFW enroller model is used exactly like any other UDW enroller model — the same `spot-enroll`/`live-enroll` workflow in [Section 4](#4-enrolling-a-model) applies unchanged.
 
 ---
 
@@ -351,8 +370,9 @@ Enroll in a quiet environment. Outside noise that leaks into a recording gets tr
 
 ### 7.2 Choosing an Enrollment Type
 
-- Use **user-defined enrollment** when the phrase should be user-chosen, or for voice biometrics — an unknown target phrase doesn't give an attacker a fixed target to attempt to spoof.
-- Use **enrolled-fixed enrollment** when the phrase is fixed at build time and you want personalization (e.g. a "recognize me specifically" tier per [5.3](#53-combining-fixed-and-enrolled-models)) without biometric security guarantees.
+- Use **user-defined enrollment (UDW)** when the phrase should be user-chosen, or for voice biometrics — an unknown target phrase doesn't give an attacker a fixed target to attempt to spoof.
+- Use **enrolled-fixed enrollment (EFW)** when the phrase is fixed at build time and you want personalization (e.g. a "recognize me specifically" tier per [5.3](#53-combining-fixed-and-enrolled-models)) without biometric security guarantees.
+- Use **simulated enrolled-fixed enrollment (SEFW)** — see [3.3](#33-simulated-enrolled-fixed-enrollment-sefw) — when you want a specific, non-user-chosen phrase (e.g. a partner or product-defined trigger built in VoiceHub) but need UDW-style enrollment mechanics. Plan for FAE involvement (or the UI-level/application-level workarounds in 3.3) since model combination isn't currently self-service.
 
 ### 7.3 Security Considerations
 
@@ -379,6 +399,7 @@ When validating an enrolled model, measure all three of the following, not just 
 - Skipping context recordings for phrases prone to co-articulation, then seeing inconsistent endpointing in production.
 - Leaving `save-enroll-audio=1` set in a shipped configuration, unintentionally persisting raw voice recordings.
 - Porting a THF/TNL biometric integration to THF-Micro without adding an explicit `svScore`/`SvThreshold` check — THF-Micro doesn't enforce the threshold internally the way THF/TNL does, so the check silently becomes a no-op (see [5.4](#54-biometric-scoring-thftnl-vs-thf-micro)).
+- Planning a product around a self-service SEFW workflow — building one currently requires a Sensory FAE (see [3.3](#33-simulated-enrolled-fixed-enrollment-sefw)); budget for that dependency or use the UI-level/application-level workaround instead.
 
 ---
 
