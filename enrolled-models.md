@@ -336,7 +336,14 @@ It is possible to **concurrently combine** a fixed model (recognizes anyone) and
 
 ### 5.4 Biometric Scoring: THF/TNL vs. THF-Micro
 
-Speaker verification scoring is enforced differently depending on which Sensory runtime is evaluating the enrolled model, and this matters for where you put your threshold-checking code.
+Recognizing a match with an enrolled model happens in two conceptually distinct steps:
+
+1. **Recognition** — phrase spotting, exactly like a fixed wake word model. This step alone is already speaker-biased: because the underlying model was trained (enrolled) on recordings from one speaker, it will tend to recognize that speaker's voice better than anyone else's, independent of any biometric security.
+2. **Verification** — an additional speaker-verification score (`sv-score`/`svScore`) compared against a threshold (`sv-threshold`/`SvThreshold`), covered below.
+
+> **Common mistake:** Setting the verification threshold to `0` disables step 2's security check, but it does **not** turn an enrolled model into a generic, "works for anyone" fixed wake word — step 1's recognition is already tuned to the enroller's voice and will continue to favor them. Enrolling multiple people, or driving the threshold to `0`, is not a substitute for a real fixed wake word model. To build a wake word that performs well across the general population, train it in **VoiceHub** (see [3.3](#33-simulated-enrolled-fixed-enrollment-sefw)) rather than through enrollment.
+
+Speaker verification scoring (step 2 above) is enforced differently depending on which Sensory runtime is evaluating the enrolled model, and this matters for where you put your threshold-checking code.
 
 | | THF / TNL | THF-Micro |
 |---|---|---|
@@ -402,6 +409,7 @@ When validating an enrolled model, measure all three of the following, not just 
 - Leaving `save-enroll-audio=1` set in a shipped configuration, unintentionally persisting raw voice recordings.
 - Porting a THF/TNL biometric integration to THF-Micro without adding an explicit `svScore`/`SvThreshold` check — THF-Micro doesn't enforce the threshold internally the way THF/TNL does, so the check silently becomes a no-op (see [5.4](#54-biometric-scoring-thftnl-vs-thf-micro)).
 - Planning a product around a self-service SEFW workflow — building one currently requires a Sensory FAE (see [3.3](#33-simulated-enrolled-fixed-enrollment-sefw)); budget for that dependency or use the UI-level/application-level workaround instead.
+- Trying to manufacture a generic, "works for anyone" wake word by enrolling many users and/or setting the verification threshold to `0` — recognition itself is speaker-biased from training, so this doesn't produce a real fixed wake word. Use VoiceHub instead (see [5.4](#54-biometric-scoring-thftnl-vs-thf-micro)).
 
 ---
 
