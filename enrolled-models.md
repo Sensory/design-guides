@@ -92,6 +92,8 @@ Fixed models work identically for every speaker and are set at build time. Enrol
 
 Sensory supports three enrollment types: two selected by which enroller task model you use — **user-defined (UDW)** and **enrolled-fixed (EFW)** — plus a hybrid, **simulated enrolled-fixed (SEFW)**, built by combining the two.
 
+> **Note — terminology:** Sensory historically called wake words "triggers," so you may still see **UDT** (User-Defined Trigger) used interchangeably with **UDW** (User-Defined Wake word), and **EFT** (Enrolled-Fixed Trigger) interchangeably with **EFW** (Enrolled-Fixed Wake word). This guide uses **UDW** and **EFW** throughout, since "wake word" is Sensory's current terminology — the one exception is enroller task model filenames, which still use the older `udt-`/`eft-` prefixes (e.g. `udt-enUS-5.1.1.9.snsr`).
+
 ### 3.1 User-Defined Enrollment
 
 In user-defined enrollment, the target phrase is **not known in advance** — the speaker may enroll any phrase of three or more syllables. Because the phrase is unknown, a voice activity detector (VAD) is used to find the start and end of speech in each recording. Speech should be recorded in relative quiet, since background noise cannot be distinguished from the target phrase ahead of time.
