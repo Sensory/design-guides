@@ -363,7 +363,7 @@ Confirm exact field names, struct layout, and default threshold behavior against
 TNL enroller models come in two generations, which determine how you tune *recognition* sensitivity (step 1 in [5.4](#54-biometric-scoring-thftnl-vs-thf-micro)) for the resulting enrolled model:
 
 - **Newer enroller models** support **operating points (OPs)** — a small selectable range built into the enrolled model itself (commonly 6–14 or 7–13, with 10 as the default), trading off recognition sensitivity. Example: `udt-universal-3.67.1.snsr`.
-- **Older enroller models** have no concept of an operating point. Example: `udw-enUS-5.1.1.9-tssv.snsr`.
+- **Older enroller models** have no concept of an operating point. Example: `udt-enUS-5.1.1.9.snsr`.
 
 | If the enrolled model... | Tune recognition sensitivity with |
 |---|---|
@@ -405,7 +405,7 @@ spot-convert -t task [options] target
 
 | Enrolled model built from... | Common target code |
 |---|---|
-| An older enroller model (e.g. `udw-enUS-5.1.1.9-tssv.snsr`) | `pc38` |
+| An older enroller model (e.g. `udt-enUS-5.1.1.9.snsr`) | `pc38` |
 | A newer enroller model (e.g. `udt-universal-3.67.1.snsr`) | `pc62w` |
 
 Target codes are platform- and SDK-version-specific; confirm the current code for your target against `doc.sensory.com` or with your Sensory FAE. See [Output Formats and DSP Platform Versions](https://doc.sensory.com/thf-micro/latest/VoiceHub%20Versions.html) for the current list.
@@ -487,7 +487,7 @@ spot-enroll -t udt-universal-3.66.1.9.snsr \
 snsr-edit -c user1-model.c -t user1.snsr
 
 # Convert an enrolled model to deeply embedded format at runtime (typical for enrolled models)
-spot-convert -t user1.snsr pc38    # older enroller models (e.g. udw-enUS-5.1.1.9-tssv.snsr)
+spot-convert -t user1.snsr pc38    # older enroller models (e.g. udt-enUS-5.1.1.9.snsr)
 spot-convert -t user1.snsr pc62w   # newer enroller models
 ```
 
