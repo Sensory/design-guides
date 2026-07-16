@@ -273,7 +273,7 @@ The `spot-enroll` and `live-enroll` tools are thin wrappers around the same SDK 
 | `^adapted` | A context model has been adapted into a new enrolled model |
 | `^done` | The overall enrollment run completes |
 
-**Illustrative enrollment sequence** (function names and settings per the table above — see the [`spot-enroll.c`](https://doc.sensory.com/tnl/7.8/api/sample/c/spot-enroll/) / [`live-enroll.c`](https://doc.sensory.com/tnl/7.8/api/sample/c/live-enroll/) / `live_enroll.py` / `enrollUDT.java` samples included with your SDK for a complete, compilable example, including the exact stream-attachment calls, which are omitted here):
+**Illustrative enrollment sequence** (function names and settings per the table above — see the [`spot-enroll.c`](https://doc.sensory.com/tnl/7.8/api/sample/c/spot-enroll/) / [`live-enroll.c`](https://doc.sensory.com/tnl/7.8/api/sample/c/live-enroll/) / [`live_enroll.py`](https://doc.sensory.com/tnl/7.8/api/sample/python/live_enroll/#live_enrollpy) / [`enrollUDT.java`](https://doc.sensory.com/tnl/7.8/api/sample/java/enrollUDT/) samples included with your SDK for a complete, compilable example, including the exact stream-attachment calls, which are omitted here):
 
 ```c
 SnsrSession s;
