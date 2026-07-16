@@ -89,7 +89,7 @@ Fixed models work identically for every speaker and are set at build time. Enrol
 
   | Filename | Enrollment type | Notes |
   |---|---|---|
-  | `eft-hbg-enUS-23.0.0.9.snsr` | Enrolled-fixed (EFW) — see [3.2](#32-enrolled-fixed-enrollment) | |
+  | `eft-hbg-enUS-23.0.0.9.snsr` | Enrolled-fixed (EFW) — see [3.2](#32-enrolled-fixed-enrollment) | No operating points — tune with `score-offset` (see [5.5](#55-recognition-sensitivity-operating-points-and-score-offset)) |
   | `udt-enUS-5.1.1.9.snsr` | User-defined (UDW) — see [3.1](#31-user-defined-enrollment) | No operating points — tune with `score-offset` (see [5.5](#55-recognition-sensitivity-operating-points-and-score-offset)) |
   | `udt-universal-3.67.1.0.snsr` | User-defined (UDW) — see [3.1](#31-user-defined-enrollment) | Supports operating points (see [5.5](#55-recognition-sensitivity-operating-points-and-score-offset)) |
 
@@ -372,7 +372,7 @@ Confirm exact field names, struct layout, and default threshold behavior against
 TNL enroller models come in two generations, which determine how you tune *recognition* sensitivity (step 1 in [5.4](#54-biometric-scoring-thftnl-vs-thf-micro)) for the resulting enrolled model:
 
 - **Newer enroller models** support **operating points (OPs)** — a small selectable range built into the enrolled model itself (commonly 6–14 or 7–13, with 10 as the default), trading off recognition sensitivity. Example: `udt-universal-3.67.1.0.snsr`.
-- **Older enroller models** have no concept of an operating point. Example: `udt-enUS-5.1.1.9.snsr`.
+- **Older enroller models** have no concept of an operating point. Examples: `udt-enUS-5.1.1.9.snsr` and `eft-hbg-enUS-23.0.0.9.snsr`.
 
 | If the enrolled model... | Tune recognition sensitivity with |
 |---|---|
