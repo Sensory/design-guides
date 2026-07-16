@@ -213,9 +213,9 @@ NLU intent: set_cruise_control (0.9968) = set the cruise control to 55 miles per
 NLU entity:   number (0.9937) = 55
 NLU entity:   speed_unit (0.9936) = miles per hour
   3090   5770 Set the cruise control to fifty five miles per hour.
-Total:   108345 samples,  4.959 seconds, 73.23% rtf
-   0.:    49440 samples,  0.133 seconds,  4.32% rtf
-   1.:    73680 samples,  4.794 seconds, 104.09% rtf
+Total:   108345 samples,  3.834 seconds, 56.62% rtf
+   0.:    49440 samples,  0.131 seconds,  4.23% rtf
+   1.:    73680 samples,  3.674 seconds, 79.78% rtf
 ```
 
 **Interpreting the profiling summary:**
@@ -226,9 +226,9 @@ Total:   108345 samples,  4.959 seconds, 73.23% rtf
 | `0.:` | Slot 0 (wake word): samples and CPU time consumed by the phrase spotter |
 | `1.:` | Slot 1 (STT): samples and CPU time consumed by the STT decoder |
 
-- **RTF is expressed as a percentage.** 73.23% rtf means the pipeline used 73% of the audio duration in CPU time on this platform.
-- **Slot 0 (wake word) RTF is very low** (4.32%) — as expected for a fixed-phrase spotter running continuously.
-- **Slot 1 (STT) RTF at 104.09%** — this exceeds 100%, which means the STT decoder took slightly longer than the utterance duration to process. As described in Section 1, this is acceptable for STT because the audio is buffered over a bounded listening window; it adds latency but does not cause missed recognitions.
+- **RTF is expressed as a percentage.** 56.62% rtf means the pipeline used 56.6% of the audio duration in CPU time on this platform.
+- **Slot 0 (wake word) RTF is very low** (4.23%) — as expected for a fixed-phrase spotter running continuously.
+- **Slot 1 (STT) RTF at 79.78%** — well under 100%, meaning the STT decoder comfortably processed the utterance faster than real time on this platform.
 - The `P` lines are **partial result hypotheses**, emitted during decoding as the model's best guess evolves. These are distinct from the final transcript on the last line.
 
 ### 4.5 The Effect of Partial Results on RTF
@@ -245,19 +245,19 @@ NLU intent: set_cruise_control (0.9968) = set the cruise control to 55 miles per
 NLU entity:   number (0.9937) = 55
 NLU entity:   speed_unit (0.9936) = miles per hour
   3090   5770 Set the cruise control to fifty five miles per hour.
-Total:   108345 samples,  1.856 seconds, 27.41% rtf
-   0.:    49440 samples,  0.131 seconds,  4.25% rtf
-   1.:    73680 samples,  1.697 seconds, 36.85% rtf
+Total:   108345 samples,  1.764 seconds, 26.05% rtf
+   0.:    49440 samples,  0.130 seconds,  4.21% rtf
+   1.:    73680 samples,  1.606 seconds, 34.88% rtf
 ```
 
 **Comparison (Raspberry Pi 4):**
 
 | Configuration | Total RTF | Slot 1 (STT) RTF |
 |---|---|---|
-| `partial-result-interval=1000` (default) | 73.23% | 104.09% |
-| `partial-result-interval=0` (disabled) | 27.41% | 36.85% |
+| `partial-result-interval=1000` (default) | 56.62% | 79.78% |
+| `partial-result-interval=0` (disabled) | 26.05% | 34.88% |
 
-Disabling partial results reduced total CPU load by nearly **3×** on this platform, and brought the STT slot well under 100% RTF.
+Disabling partial results reduced total CPU load by more than **2×** on this platform (56.62% → 26.05%), and brought the STT slot from 79.78% down to 34.88% RTF.
 
 **Design guidance:**
 
@@ -291,50 +291,51 @@ bin/snsr-eval -pp -t vg-stt.snsr -s partial-result-interval=0 \
 Processed 108345 samples at 16000 Hz for a total 6771.562 ms
 
               ELEMENT        MAX            TIME       BIN    TOTAL      CPU
-               :total:                  1849.695 ms  100.0 %  100.0 %   27.3 %
-                    1:   481.435 ms     1690.494 ms   91.4 %   91.4 %   25.0 %
-                    0:     1.305 ms      129.896 ms    7.0 %    7.0 %    1.9 %
-                  vad:     0.478 ms       26.290 ms    1.4 %    1.4 %    0.4 %
-            :overhead:                     1.957 ms    0.1 %    0.1 %    0.0 %
-                  arb:     0.032 ms        0.608 ms    0.0 %    0.0 %    0.0 %
-                  seg:     0.108 ms        0.293 ms    0.0 %    0.0 %    0.0 %
-                  dmx:     0.002 ms        0.144 ms    0.0 %    0.0 %    0.0 %
+               :total:                  1771.335 ms  100.0 %  100.0 %   26.2 %
+                    1:   464.410 ms     1613.504 ms   91.1 %   91.1 %   23.8 %
+                    0:     1.246 ms      129.612 ms    7.3 %    7.3 %    1.9 %
+                  vad:     0.457 ms       24.903 ms    1.4 %    1.4 %    0.4 %
+            :overhead:                     2.215 ms    0.1 %    0.1 %    0.0 %
+                  arb:     0.034 ms        0.677 ms    0.0 %    0.0 %    0.0 %
+                  seg:     0.109 ms        0.284 ms    0.0 %    0.0 %    0.0 %
+                  dmx:     0.002 ms        0.127 ms    0.0 %    0.0 %    0.0 %
               reverse:     0.013 ms        0.013 ms    0.0 %    0.0 %    0.0 %
 
-             :1 total:                  1690.494 ms  100.0 %   91.4 %   25.0 %
-               1.onnx:   449.495 ms     1517.258 ms   89.8 %   82.0 %   22.4 %
-               1.bert:    43.552 ms      100.641 ms    6.0 %    5.4 %    1.5 %
-                1.mod:     0.405 ms       36.844 ms    2.2 %    2.0 %    0.5 %
-          :1 overhead:                    11.857 ms    0.7 %    0.6 %    0.2 %
-                1.fex:     0.365 ms        8.855 ms    0.5 %    0.5 %    0.1 %
-             1.search:     2.713 ms        8.564 ms    0.5 %    0.5 %    0.1 %
-                1.pnc:     5.402 ms        5.402 ms    0.3 %    0.3 %    0.1 %
-             1.result:     0.626 ms        0.626 ms    0.0 %    0.0 %    0.0 %
-           1.textnorm:     0.185 ms        0.185 ms    0.0 %    0.0 %    0.0 %
+             :1 total:                  1613.504 ms  100.0 %   91.1 %   23.8 %
+               1.onnx:   432.362 ms     1456.351 ms   90.3 %   82.2 %   21.5 %
+               1.bert:    31.988 ms       88.672 ms    5.5 %    5.0 %    1.3 %
+                1.mod:     0.383 ms       34.584 ms    2.1 %    2.0 %    0.5 %
+          :1 overhead:                    11.267 ms    0.7 %    0.6 %    0.2 %
+                1.fex:     0.264 ms        8.501 ms    0.5 %    0.5 %    0.1 %
+             1.search:     2.168 ms        7.695 ms    0.5 %    0.4 %    0.1 %
+                1.pnc:     5.401 ms        5.401 ms    0.3 %    0.3 %    0.1 %
+             1.result:     0.627 ms        0.627 ms    0.0 %    0.0 %    0.0 %
+           1.textnorm:     0.190 ms        0.190 ms    0.0 %    0.0 %    0.0 %
+                1.ctx:     0.005 ms        0.085 ms    0.0 %    0.0 %    0.0 %
+
+             :0 total:                   129.612 ms  100.0 %    7.3 %    1.9 %
+                0.net:     0.732 ms      115.497 ms   89.1 %    6.5 %    1.7 %
+                0.fex:     0.044 ms        7.502 ms    5.8 %    0.4 %    0.1 %
+          :0 overhead:                     2.727 ms    2.1 %    0.2 %    0.0 %
+             0.search:     0.534 ms        2.582 ms    2.0 %    0.1 %    0.0 %
             ...
 
-             :0 total:                   129.896 ms  100.0 %    7.0 %    1.9 %
-                0.net:     0.732 ms      116.526 ms   89.7 %    6.3 %    1.7 %
-                0.fex:     0.080 ms        6.694 ms    5.2 %    0.4 %    0.1 %
-             0.search:     0.602 ms        2.759 ms    2.1 %    0.1 %    0.0 %
-            ...
-
-           :vad total:                    26.290 ms  100.0 %    1.4 %    0.4 %
-              vad.fex:     0.074 ms        8.590 ms   32.7 %    0.5 %    0.1 %
-             vad.net0:     0.069 ms        7.818 ms   29.7 %    0.4 %    0.1 %
-              vad.vad:     0.389 ms        4.297 ms   16.3 %    0.2 %    0.1 %
+           :vad total:                    24.903 ms  100.0 %    1.4 %    0.4 %
+              vad.fex:     0.063 ms        8.259 ms   33.2 %    0.5 %    0.1 %
+             vad.net0:     0.045 ms        7.403 ms   29.7 %    0.4 %    0.1 %
+              vad.vad:     0.367 ms        4.103 ms   16.5 %    0.2 %    0.1 %
             ...
 ```
 
 **Key observations from the detailed profile:**
 
-- **STT (slot 1) dominates at 91.4% of total CPU time.** Within slot 1, the ONNX transformer neural network (`1.onnx`) accounts for 89.8% of that slot's time — it is by far the primary cost driver. The BERT language model (`1.bert`) is second at 6.0%. Everything else (feature extraction, CTC search, NLU, punctuation normalization) is negligible by comparison.
+- **STT (slot 1) dominates at 91.1% of total CPU time.** Within slot 1, the ONNX transformer neural network (`1.onnx`) accounts for 90.3% of that slot's time — it is by far the primary cost driver. The BERT language model (`1.bert`) is second at 5.5%. Everything else (feature extraction, CTC search, NLU, punctuation normalization) is negligible by comparison.
 
-- **Wake word (slot 0) is lightweight at 7.0% of total CPU**, with its own neural network (`0.net`) accounting for 89.7% of slot 0's time. At only 1.9% of audio duration, the wake word detector imposes minimal continuous load on the system.
+- **Wake word (slot 0) is lightweight at 7.3% of total CPU**, with its own neural network (`0.net`) accounting for 89.1% of slot 0's time. At only 1.9% of audio duration, the wake word detector imposes minimal continuous load on the system.
 
 - **VAD contributes just 1.4% of total CPU time (0.4% of audio duration).** The VAD is essentially free from a resource planning perspective. Its feature extraction (`vad.fex`) and two-stage neural network (`vad.net0`, `vad.net1`) together account for the majority of its modest cost.
 
-- **The `MAX` column reveals worst-case latency per invocation.** The ONNX network in slot 1 has a maximum single-call time of 449 ms — relevant if the application is sensitive to jitter in partial result delivery.
+- **The `MAX` column reveals worst-case latency per invocation.** The ONNX network in slot 1 has a maximum single-call time of 432 ms — relevant if the application is sensitive to jitter in partial result delivery.
 
 - **Punctuation and normalization (`1.pnc`) runs only once** at the end of the utterance (5.4 ms total, same as MAX), confirming it is a post-processing step on the final hypothesis only.
 
@@ -503,11 +504,11 @@ bin/snsr-eval -p -t vg-stt.snsr data/audio/noise-10s.wav
 **Actual output (Raspberry Pi 4, SDK 7.8.0):**
 
 ```
-Total:   163303 samples,  0.440 seconds,  4.31% rtf
-   0.:   163303 samples,  0.434 seconds,  4.26% rtf
+Total:   163303 samples,  0.395 seconds,  3.87% rtf
+   0.:   163303 samples,  0.391 seconds,  3.83% rtf
 ```
 
-Note that **slot 1 does not appear** in the output. Because the wake word never fires on noise input, the VAD and STT stages are never invoked and contribute no CPU time. The 4.31% total RTF reflects the continuous cost of wake word detection alone — this is the steady-state load the system will carry during idle listening.
+Note that **slot 1 does not appear** in the output. Because the wake word never fires on noise input, the VAD and STT stages are never invoked and contribute no CPU time. The 3.87% total RTF reflects the continuous cost of wake word detection alone — this is the steady-state load the system will carry during idle listening.
 
 ### 6.3 Average MIPS Measurement with `perf stat`
 
@@ -527,18 +528,18 @@ perf stat bin/snsr-eval -t model/spot-voicegenie-enUS-6.5.1-m.snsr \
 ```
  Performance counter stats for 'bin/snsr-eval -t model/spot-voicegenie-enUS-6.5.1-m.snsr data/audio/noise-100s.wav':
 
-          4,685.93 msec task-clock:u             #    0.994 CPUs utilized
+          3,935.15 msec task-clock:u             #    0.999 CPUs utilized
                  0      context-switches:u        #    0.000 /sec
                  0      cpu-migrations:u          #    0.000 /sec
-               599      page-faults:u             #  127.830 /sec
-     8,189,811,590      cycles:u                  #    1.748 GHz
-    10,546,585,073      instructions:u            #    1.29  insn per cycle
+               600      page-faults:u             #  152.472 /sec
+     6,978,352,554      cycles:u                  #    1.773 GHz
+    10,546,577,162      instructions:u            #    1.51  insn per cycle
    <not supported>      branches:u
-         9,089,640      branch-misses:u
+         8,989,456      branch-misses:u
 
-       4.715627546 seconds time elapsed
-       4.651830000 seconds user
-       0.035906000 seconds sys
+       3.938819618 seconds time elapsed
+       3.909118000 seconds user
+       0.028008000 seconds sys
 ```
 
 **Calculating MIPS:**
@@ -547,25 +548,25 @@ The key figure is `instructions:u` — the total instruction count for the entir
 
 ```
 MIPS = instructions / audio_duration_seconds / 1,000,000
-     = 10,546,585,073 / 100 / 1,000,000
-     = 105.4 MIPS
+     = 10,546,577,162 / 100 / 1,000,000
+     = 105.5 MIPS
 ```
 
 **Interpreting the output:**
 
 | Field | Value | Notes |
 |---|---|---|
-| `task-clock:u` | 4,685.93 msec | Total CPU time consumed by the process |
-| `CPUs utilized` | 0.994 | Effectively single-threaded — expected |
-| `cycles:u` | 8,189,811,590 | Raw clock cycles |
-| `instructions:u` | 10,546,585,073 | **The key figure for MIPS calculation** |
-| `insn per cycle` | 1.29 | IPC — reflects NEON SIMD utilization |
-| `seconds time elapsed` | 4.716 | Wall clock time |
-| `seconds user` | 4.652 | User-space CPU time |
+| `task-clock:u` | 3,935.15 msec | Total CPU time consumed by the process |
+| `CPUs utilized` | 0.999 | Effectively single-threaded — expected |
+| `cycles:u` | 6,978,352,554 | Raw clock cycles |
+| `instructions:u` | 10,546,577,162 | **The key figure for MIPS calculation** |
+| `insn per cycle` | 1.51 | IPC — reflects NEON SIMD utilization |
+| `seconds time elapsed` | 3.939 | Wall clock time |
+| `seconds user` | 3.909 | User-space CPU time |
 
-- The **~4.7 seconds of CPU time** to process **100 seconds of audio** is consistent with the ~4.3% RTF measured in Section 6.2.
-- The **IPC of 1.29** reflects efficient SIMD utilization via ARM NEON extensions. A lower IPC (closer to 1.0) on a platform without NEON would indicate the same work is taking more cycles.
-- `branches:u` showing `<not supported>` is normal on some ARM configurations — it does not affect the instruction count or MIPS calculation.
+- The **~3.9 seconds of CPU time** to process **100 seconds of audio** is consistent with the ~3.87% RTF measured in Section 6.2.
+- The **instruction count is virtually identical** to the VNC measurement (10,546,577,162 vs 10,546,585,073 — a difference of fewer than 10,000 instructions out of 10.5 billion). This confirms that MIPS is a stable, reproducible metric unaffected by the remote desktop environment. The VNC overhead showed up in clock cycles and wall time, not in instruction count.
+- The **IPC improved from 1.29 to 1.51** without VNC competing for CPU resources, reflecting more efficient instruction throughput on an uncontended core.
 
 ### 6.4 Average Memory Measurement
 
@@ -574,7 +575,7 @@ Processing a WAV file offline is unsuitable for this measurement: `snsr-eval` ru
 **Step 1 — Start `snsr-eval` in live audio mode** (Terminal 1):
 
 ```bash
-bin/snsr-eval -t vg-stt.snsr
+bin/snsr-eval -v -t vg-stt.snsr
 ```
 
 Wait a few seconds for initialization to complete. You will see the message `Using live audio from default capture device. ^C to stop.`
@@ -612,8 +613,8 @@ Press `^C`.
 
 | Metric | Value |
 |---|---|
-| Average RTF (wake word, noise input) | **4.31%** |
-| Average MIPS (wake word, 100s noise) | **105.4 MIPS** |
+| Average RTF (wake word, noise input) | **3.87%** |
+| Average MIPS (wake word, 100s noise) | **105.5 MIPS** |
 | `MemTotal` | 7,998,716 kB |
 | `snsr-eval` `%MEM` | 2.0% |
 | **Average steady-state RAM** | 2.0% × 7,998,716 kB = **~156 MB** |
@@ -723,7 +724,7 @@ perf stat bin/snsr-eval -t model/spot-voicegenie-enUS-6.5.1-m.snsr \
 #   Calculate: MIPS = instructions:u / 100 / 1,000,000
 
 # 11. Average steady-state memory (run in Terminal 1, then steps below in Terminal 2)
-bin/snsr-eval -t vg-stt.snsr
+bin/snsr-eval -v -t vg-stt.snsr
 #   Terminal 2, Step 1 — get total RAM:  grep MemTotal /proc/meminfo
 #   Terminal 2, Step 2 — get %MEM:       top -p $(pgrep snsr-eval)
 #   Calculate:  Average RAM = %MEM × MemTotal
