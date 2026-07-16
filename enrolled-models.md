@@ -294,7 +294,25 @@ Accessed via `snsrForEach`:
 | `re-adapt` | int, write-only | Set to `1` to force the adaptation step to always run, even when it would normally be skipped. |
 | `rename-user` | string, write-only | Changes the recognition result returned for `user` to the given string. |
 
-#### 4.6.6 Illustrative Enrollment Sequence
+#### 4.6.6 Enroller Status/Results
+
+Read-only result fields, available within specific event callbacks or iterators as noted:
+
+| Key | Type | Available in | Description |
+|---|---|---|---|
+| `enrollment-count` | int | `enrollment-iterator`, `user-iterator` | The number of recordings accumulated for the enrolled user. |
+| `enrollment-id` | int | `^fail`, `^pass`, `enrollment-iterator` | A unique ID for the current user's current enrollment. |
+| `model-stream` | stream | `^done` | The resulting model that will recognize the enrolled phrases. |
+| `percent-done` | double | `^progress` | Estimated enrollment task completion progress, `0`–`100`. |
+| `reason` | string | `^fail`, `reason-iterator` | Shorthand indication of why an enrollment recording was rejected. |
+| `reason-guidance` | string | `^fail`, `reason-iterator` | Human-readable (English) suggestion for correcting an enrollment failure. |
+| `reason-pass` | int | `^fail`, `reason-iterator` | `1` if the enrollment passed, `0` if it was rejected. |
+| `reason-threshold` | double | `^fail`, `reason-iterator` | The threshold value an enrollment check compared against. |
+| `reason-value` | double | `^fail`, `reason-iterator` | The value of the enrollment check parameter, compared against `reason-threshold`. |
+| `user-count` | int | `^adapted`, `^new-user` | The number of distinct enrolled users. |
+| `user-index` | int | `user-iterator` | The index of the current item in the user list iteration. |
+
+#### 4.6.7 Illustrative Enrollment Sequence
 
 Function names and settings per the tables above — see the [`spot-enroll.c`](https://doc.sensory.com/tnl/7.8/api/sample/c/spot-enroll/) / [`live-enroll.c`](https://doc.sensory.com/tnl/7.8/api/sample/c/live-enroll/) / [`live_enroll.py`](https://doc.sensory.com/tnl/7.8/api/sample/python/live_enroll/#live_enrollpy) / [`enrollUDT.java`](https://doc.sensory.com/tnl/7.8/api/sample/java/enrollUDT/) samples included with your SDK for a complete, compilable example, including the exact stream-attachment calls, which are omitted here:
 
@@ -534,5 +552,6 @@ spot-convert -t user1.snsr pc62w   # newer enroller models
 - Setting keys reference: https://doc.sensory.com/tnl/7.8/api/setting-keys/
 - Runtime event keys: https://doc.sensory.com/tnl/7.8/api/setting-keys/events/
 - Iterator keys: https://doc.sensory.com/tnl/7.8/api/setting-keys/iterators/#enrollment--adaptation
+- Result keys: https://doc.sensory.com/tnl/7.8/api/setting-keys/results/
 - THF-Micro Docs: https://doc.sensory.com/thf-micro/latest/
 - [Benchmarking RTF and Avg/Max Memory Usage](benchmarking-rtf-memory.md) — for measuring enrolled-model runtime cost and embedding models in code space
