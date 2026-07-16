@@ -276,6 +276,14 @@ The `spot-enroll` and `live-enroll` tools are thin wrappers around the same SDK 
 | `^adapted` | A context model has been adapted into a new enrolled model |
 | `^done` | The overall enrollment run completes |
 
+**Enrollment iterators** (accessed via `snsrForEach`):
+
+| Iterator | Description | Exposed fields | Availability |
+|---|---|---|---|
+| `enrollment-iterator` | Iterate over all wake word enrollments for the current user | `audio-stream`, `audio-stream-first`, `audio-stream-last`, `begin-sample`, `end-sample`, `enrollment-id`, `user` | Any context — use to retrieve enrollment audio when `save-enroll-audio` is enabled |
+| `reason-iterator` | Iterate over all reasons for a wake word enrollment failure | `reason`, `reason-guidance`, `reason-pass`, `reason-threshold`, `reason-value` | Only within the `^fail` event callback |
+| `user-iterator` | Iterate over all enrolled users | `enrollment-count`, `user` | Any context — automatically sets the `user` setting for each iteration as you loop |
+
 **Illustrative enrollment sequence** (function names and settings per the table above — see the [`spot-enroll.c`](https://doc.sensory.com/tnl/7.8/api/sample/c/spot-enroll/) / [`live-enroll.c`](https://doc.sensory.com/tnl/7.8/api/sample/c/live-enroll/) / [`live_enroll.py`](https://doc.sensory.com/tnl/7.8/api/sample/python/live_enroll/#live_enrollpy) / [`enrollUDT.java`](https://doc.sensory.com/tnl/7.8/api/sample/java/enrollUDT/) samples included with your SDK for a complete, compilable example, including the exact stream-attachment calls, which are omitted here):
 
 ```c
@@ -513,5 +521,6 @@ spot-convert -t user1.snsr pc62w   # newer enroller models
 - Inference & I/O API: https://doc.sensory.com/tnl/7.8/api/inference/
 - Setting keys reference: https://doc.sensory.com/tnl/7.8/api/setting-keys/
 - Runtime event keys: https://doc.sensory.com/tnl/7.8/api/setting-keys/events/
+- Iterator keys: https://doc.sensory.com/tnl/7.8/api/setting-keys/iterators/#enrollment--adaptation
 - THF-Micro Docs: https://doc.sensory.com/thf-micro/latest/
 - [Benchmarking RTF and Avg/Max Memory Usage](benchmarking-rtf-memory.md) — for measuring enrolled-model runtime cost and embedding models in code space
