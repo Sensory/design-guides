@@ -340,8 +340,6 @@ The recognizer raises a `^result` event when a final recognition hypothesis is a
 
 > **Design guidance:** On THF/TNL, don't re-implement threshold logic in application code — set `sv-threshold` on the session and let the SDK enforce it (see [5.4](#54-biometric-scoring-thftnl-vs-thf-micro)). THF-Micro works differently and requires an explicit check; see the same section.
 
-Related VAD/timing events (`^begin`, `^end`, `^limit`, `^silence`) fire during recognition the same way they do for any wake word or command task and can be used for endpointing/UX feedback independent of the final result.
-
 ### 5.3 Combining Fixed and Enrolled Models
 
 It is possible to **concurrently combine** a fixed model (recognizes anyone) and an enrolled model (recognizes a specific speaker) — even for the same target phrase. In this configuration, the enrolled speaker is matched by both the fixed and enrolled models, while any other speaker is matched only by the fixed model. This is a common pattern for adding an optional "recognize me specifically" tier on top of baseline recognition that works for everyone.
