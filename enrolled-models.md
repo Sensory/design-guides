@@ -269,6 +269,9 @@ The `spot-enroll` and `live-enroll` tools are thin wrappers around the same SDK 
 | `^pass` | A recording passes the audio check |
 | `^fail` | A recording fails the audio check |
 | `^next` | The session is ready for the next recording |
+| `^pause` | A time-consuming processing step is about to start — use this to pause the input stream during interactive enrollment |
+| `^progress` | Reports adaptation progress (`percent-done`) |
+| `^resume` | A time-consuming processing step has completed — use this to restart an input stream that was stopped on `^pause` |
 | `^enrolled` | Enrollment for a user/phrase completes |
 | `^adapted` | A context model has been adapted into a new enrolled model |
 | `^done` | The overall enrollment run completes |
