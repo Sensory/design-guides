@@ -36,6 +36,8 @@
    - [5.4 Biometric Scoring: THF/TNL vs. THF-Micro](#54-biometric-scoring-thftnl-vs-thf-micro)
    - [5.5 Recognition Sensitivity: Operating Points and score-offset](#55-recognition-sensitivity-operating-points-and-score-offset)
 6. [Converting to a Deeply Embedded Model](#6-converting-to-a-deeply-embedded-model)
+   - [6.1 Compiling a Model into the Application (snsr-edit)](#61-compiling-a-model-into-the-application-snsr-edit)
+   - [6.2 Converting an Enrolled Model at Runtime (spot-convert)](#62-converting-an-enrolled-model-at-runtime-spot-convert)
 7. [Design Guidelines](#7-design-guidelines)
    - [7.1 Recording Quality and Environment](#71-recording-quality-and-environment)
    - [7.2 Choosing an Enrollment Type](#72-choosing-an-enrollment-type)
@@ -365,7 +367,7 @@ TNL enroller models come in two generations, which determine how you tune *recog
 
 | If the enrolled model... | Tune recognition sensitivity with |
 |---|---|
-| Supports operating points | The model's OP setting |
+| Supports operating points | `operating-point` |
 | Does not support operating points | `score-offset` |
 
 `score-offset` defaults to `0` and effectively ranges about ±30. Higher values make recognition more *accepting* (looser matching, fewer false rejects); negative values make it more *rejecting* (stricter matching, fewer false accepts).
@@ -376,13 +378,37 @@ TNL enroller models come in two generations, which determine how you tune *recog
 
 ## 6. Converting to a Deeply Embedded Model
 
-An enrolled model loaded from a file at runtime is held in heap memory, the same as any other `.snsr` model. On memory-constrained embedded targets, it can instead be converted to a C array and linked directly into the executable's read-only data segment, removing it from the heap entirely — the same technique used for any pipeline model, described in detail in [Benchmarking RTF and Avg/Max Memory Usage §5.4](benchmarking-rtf-memory.md#54-reducing-heap-usage-by-embedding-the-model-in-code-space):
+There are two distinct ways to get a `.snsr` model onto a deeply embedded target (e.g. a standalone DSP running THF-Micro), and they serve different purposes.
+
+### 6.1 Compiling a Model into the Application (snsr-edit)
+
+Any model loaded from a file at runtime is held in heap memory. On memory-constrained embedded targets, it can be converted to a C array and linked directly into the executable's read-only data segment, removing it from the heap entirely — the same technique used for any pipeline model, described in detail in [Benchmarking RTF and Avg/Max Memory Usage §5.4](benchmarking-rtf-memory.md#54-reducing-heap-usage-by-embedding-the-model-in-code-space):
 
 ```bash
 snsr-edit -c user1-model.c -t user1.snsr
 ```
 
 Study the `spot-data.c` sample included with the SDK (`sample/c/`) for how to pass embedded model data to the SDK via the data API instead of a file path.
+
+> **Note:** For **enrolled models specifically, this is uncommon.** Compiling an enrolled model into the application hard-codes that one person's enrollment into the firmware image at build time — the app will only ever recognize whoever was enrolled when the binary was compiled. That's rarely what you want, since enrollment normally happens per end user, on their own device. Reach for this only if you genuinely intend to ship a fixed, factory-enrolled voice.
+
+### 6.2 Converting an Enrolled Model at Runtime (spot-convert)
+
+The more common path for enrolled models is `spot-convert`, which converts a `.snsr` model to deeply embedded format directly, without compiling it into the application. This keeps enrollment a runtime, per-user operation — the conversion can be run as part of an on-device enrollment flow — rather than baking one person's voice into the firmware image.
+
+```
+spot-convert -t task [options] target
+```
+
+- `task` — the `.snsr` file to convert (typically the enrolled model)
+- `target` — a 4- or 5-character deeply embedded target code identifying the destination platform/format
+
+| Enrolled model built from... | Common target code |
+|---|---|
+| An older enroller model (e.g. `udw-enUS-5.1.1.9-tssv.snsr`) | `pc38` |
+| A newer enroller model | `pc62w` |
+
+Target codes are platform- and SDK-version-specific; confirm the current code for your target against `doc.sensory.com` or with your Sensory FAE.
 
 This is particularly relevant for enrolled models: as noted in [7.4](#74-cpu-and-memory-budgeting), enrollment itself is comparatively expensive, but the *resulting* enrolled model is small and cheap to run — small enough that it's often converted this way and deployed to a low-power standalone DSP running THF-Micro, separate from the (typically more capable) hardware used to perform the enrollment itself.
 
@@ -428,6 +454,7 @@ When validating an enrolled model, measure all three of the following, not just 
 - Planning a product around a self-service SEFW workflow — building one currently requires a Sensory FAE (see [3.3](#33-simulated-enrolled-fixed-enrollment-sefw)); budget for that dependency or use the UI-level/application-level workaround instead.
 - Trying to manufacture a generic, "works for anyone" wake word by enrolling many users and/or setting the verification threshold to `0` — recognition itself is speaker-biased from training, so this doesn't produce a real fixed wake word. Use VoiceHub instead (see [5.4](#54-biometric-scoring-thftnl-vs-thf-micro)).
 - Reaching for `score-offset` on a model that actually supports operating points, or vice versa — check which generation of enroller model produced your enrolled model before choosing a sensitivity-tuning approach (see [5.5](#55-recognition-sensitivity-operating-points-and-score-offset)).
+- Using `snsr-edit -c` to embed an enrolled model, unintentionally hard-coding a single person's voice into the shipped firmware — `spot-convert` is the right tool for a deeply embedded target that still needs per-user enrollment (see [6.2](#62-converting-an-enrolled-model-at-runtime-spot-convert)).
 
 ---
 
@@ -456,8 +483,12 @@ spot-enroll -t udt-universal-3.66.1.9.snsr \
     +user1 user11.wav user12.wav user13.wav user14.wav \
     +user2 user21.wav user22.wav user23.wav user24.wav
 
-# Convert an enrolled model to an embeddable C array
+# Compile an enrolled model into the application (hard-codes one user — see 6.1)
 snsr-edit -c user1-model.c -t user1.snsr
+
+# Convert an enrolled model to deeply embedded format at runtime (typical for enrolled models)
+spot-convert -t user1.snsr pc38    # older enroller models (e.g. udw-enUS-5.1.1.9-tssv.snsr)
+spot-convert -t user1.snsr pc62w   # newer enroller models
 ```
 
 ---
@@ -467,6 +498,7 @@ snsr-edit -c user1-model.c -t user1.snsr
 - TNL SDK 7.8 Docs: https://doc.sensory.com/tnl/7.8/
 - `spot-enroll` reference: https://doc.sensory.com/tnl/7.8/tools/spot-enroll/
 - `live-enroll` reference: https://doc.sensory.com/tnl/7.8/tools/live-enroll/
+- `spot-convert` reference: https://doc.sensory.com/tnl/7.8/tools/spot-convert/
 - Enrollment model types: https://doc.sensory.com/tnl/7.8/models/types/enroll/
 - Inference & I/O API: https://doc.sensory.com/tnl/7.8/api/inference/
 - Setting keys reference: https://doc.sensory.com/tnl/7.8/api/setting-keys/
