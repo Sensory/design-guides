@@ -261,7 +261,6 @@ The `spot-enroll` and `live-enroll` tools are thin wrappers around the same SDK 
 | `enrollment-task-index` | int | Selects which sub-task receives recordings, for multi-task enrollment models. Default `0`. |
 | `delete-user` | string | Removes the named user from a loaded context model. |
 | `save-enroll-audio` | int | `1` retains raw enrollment recordings in a saved context model; `0` (default) discards them. See [7.3](#73-security-considerations). |
-| `max-users` | int | Limits the number of distinct users a continuously adapting fixed-phrase spotter will enroll. |
 
 #### 4.6.3 Enrollment Event Callbacks
 
