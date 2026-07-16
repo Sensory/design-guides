@@ -84,7 +84,16 @@ Fixed models work identically for every speaker and are set at build time. Enrol
 - TrulyHandsfree or TrulyNatural SDK installed, with the following tools accessible on your `PATH`:
   - `spot-enroll` — offline enrollment from pre-recorded audio
   - `live-enroll` — interactive enrollment from a live microphone
-- An **enroller task model**, distributed with the SDK (e.g. `udt-enUS-5.1.1.9.snsr` for user-defined enrollment, or an enrolled-fixed task model for a phrase known at build time) — or, for a simulated enrolled-fixed (SEFW) model, a VoiceHub wake word project and Sensory FAE assistance to build it (see [3.3](#33-simulated-enrolled-fixed-enrollment-sefw)).
+  - `spot-convert` — converts an enrolled model to deeply embedded format; only needed if targeting a deeply embedded platform (see [6.2](#62-converting-an-enrolled-model-at-runtime-spot-convert))
+- An **enroller task model**, distributed with the SDK. The THF SDK ships three:
+
+  | Filename | Enrollment type | Notes |
+  |---|---|---|
+  | `eft-hbg-enUS-23.0.0.9.snsr` | Enrolled-fixed (EFW) — see [3.2](#32-enrolled-fixed-enrollment) | |
+  | `udt-enUS-5.1.1.9.snsr` | User-defined (UDW) — see [3.1](#31-user-defined-enrollment) | No operating points — tune with `score-offset` (see [5.5](#55-recognition-sensitivity-operating-points-and-score-offset)) |
+  | `udt-universal-3.67.1.0.snsr` | User-defined (UDW) — see [3.1](#31-user-defined-enrollment) | Supports operating points (see [5.5](#55-recognition-sensitivity-operating-points-and-score-offset)) |
+
+  — or, for a simulated enrolled-fixed (SEFW) model, a VoiceHub wake word project and Sensory FAE assistance to build it (see [3.3](#33-simulated-enrolled-fixed-enrollment-sefw)).
 - Audio recordings of the target speaker, if enrolling offline: 16-bit PCM WAV, recorded in a quiet environment (see [4.2 Recording Guidelines](#42-recording-guidelines)).
 
 > **Note:** Enrollment is on-device. Recordings and the resulting enrolled model never need to leave the local system, though some deployments do transfer the *recordings* to a more powerful machine to run the enroller there before shipping the resulting enrolled model back to the device — see [7.4 CPU and Memory Budgeting](#74-cpu-and-memory-budgeting).
@@ -362,7 +371,7 @@ Confirm exact field names, struct layout, and default threshold behavior against
 
 TNL enroller models come in two generations, which determine how you tune *recognition* sensitivity (step 1 in [5.4](#54-biometric-scoring-thftnl-vs-thf-micro)) for the resulting enrolled model:
 
-- **Newer enroller models** support **operating points (OPs)** — a small selectable range built into the enrolled model itself (commonly 6–14 or 7–13, with 10 as the default), trading off recognition sensitivity. Example: `udt-universal-3.67.1.snsr`.
+- **Newer enroller models** support **operating points (OPs)** — a small selectable range built into the enrolled model itself (commonly 6–14 or 7–13, with 10 as the default), trading off recognition sensitivity. Example: `udt-universal-3.67.1.0.snsr`.
 - **Older enroller models** have no concept of an operating point. Example: `udt-enUS-5.1.1.9.snsr`.
 
 | If the enrolled model... | Tune recognition sensitivity with |
@@ -406,7 +415,7 @@ spot-convert -t task [options] target
 | Enrolled model built from... | Common target code |
 |---|---|
 | An older enroller model (e.g. `udt-enUS-5.1.1.9.snsr`) | `pc38` |
-| A newer enroller model (e.g. `udt-universal-3.67.1.snsr`) | `pc62w` |
+| A newer enroller model (e.g. `udt-universal-3.67.1.0.snsr`) | `pc62w` |
 
 Target codes are platform- and SDK-version-specific; confirm the current code for your target against `doc.sensory.com` or with your Sensory FAE. See [Output Formats and DSP Platform Versions](https://doc.sensory.com/thf-micro/latest/VoiceHub%20Versions.html) for the current list.
 
