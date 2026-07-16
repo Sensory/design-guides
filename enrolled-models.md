@@ -378,7 +378,7 @@ TNL enroller models come in two generations, which determine how you tune *recog
 
 ## 6. Converting to a Deeply Embedded Model
 
-There are two distinct ways to get a `.snsr` model onto a deeply embedded target (e.g. a standalone DSP running THF-Micro), and they serve different purposes.
+There are two distinct ways to convert a `.snsr` model to run on a deeply embedded target (e.g. a standalone DSP running THF-Micro), and they serve different purposes.
 
 ### 6.1 Compiling a Model into the Application (snsr-edit)
 
@@ -406,9 +406,9 @@ spot-convert -t task [options] target
 | Enrolled model built from... | Common target code |
 |---|---|
 | An older enroller model (e.g. `udw-enUS-5.1.1.9-tssv.snsr`) | `pc38` |
-| A newer enroller model | `pc62w` |
+| A newer enroller model (e.g. `udt-universal-3.67.1.snsr`) | `pc62w` |
 
-Target codes are platform- and SDK-version-specific; confirm the current code for your target against `doc.sensory.com` or with your Sensory FAE.
+Target codes are platform- and SDK-version-specific; confirm the current code for your target against `doc.sensory.com` or with your Sensory FAE. See [Output Formats and DSP Platform Versions](https://doc.sensory.com/thf-micro/latest/VoiceHub%20Versions.html) for the current list.
 
 This is particularly relevant for enrolled models: as noted in [7.4](#74-cpu-and-memory-budgeting), enrollment itself is comparatively expensive, but the *resulting* enrolled model is small and cheap to run — small enough that it's often converted this way and deployed to a low-power standalone DSP running THF-Micro, separate from the (typically more capable) hardware used to perform the enrollment itself.
 
