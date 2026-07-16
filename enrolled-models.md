@@ -236,7 +236,7 @@ There is no limit on the number of users that can be enrolled at once.
 
 The `spot-enroll` and `live-enroll` tools are thin wrappers around the same SDK inference API used everywhere else in THF/TNL, built around a session handle (`SnsrSession`) that you create, configure, feed audio, and read results/state from. The table below summarizes the relevant calls and settings; consult the **Inference & I/O** and **Setting Keys** sections of the API reference at `doc.sensory.com` and the `snsr.h` header in your installed SDK for exact prototypes, since these can shift slightly between SDK versions.
 
-**Core session functions used during enrollment:**
+#### 4.6.1 Core Session Functions Used During Enrollment
 
 | Function | Purpose |
 |---|---|
@@ -249,7 +249,7 @@ The `spot-enroll` and `live-enroll` tools are thin wrappers around the same SDK 
 | `snsrRC` / `snsrRCMessage` | Check and describe the session's error state |
 | `snsrRelease` | Release the session handle |
 
-**Enrollment settings keys:**
+#### 4.6.2 Enrollment Settings Keys
 
 | Key | Type | Description |
 |---|---|---|
@@ -262,7 +262,7 @@ The `spot-enroll` and `live-enroll` tools are thin wrappers around the same SDK 
 | `delete-user` | string | Removes the named user from a loaded context model. |
 | `save-enroll-audio` | int | `1` retains raw enrollment recordings in a saved context model; `0` (default) discards them. See [7.3](#73-security-considerations). |
 
-**Enrollment event callbacks:**
+#### 4.6.3 Enrollment Event Callbacks
 
 | Event | Fired when |
 |---|---|
@@ -276,7 +276,9 @@ The `spot-enroll` and `live-enroll` tools are thin wrappers around the same SDK 
 | `^adapted` | A context model has been adapted into a new enrolled model |
 | `^done` | The overall enrollment run completes |
 
-**Enrollment iterators** (accessed via `snsrForEach`):
+#### 4.6.4 Enrollment Iterators
+
+Accessed via `snsrForEach`:
 
 | Iterator | Description | Exposed fields | Availability |
 |---|---|---|---|
@@ -284,7 +286,9 @@ The `spot-enroll` and `live-enroll` tools are thin wrappers around the same SDK 
 | `reason-iterator` | Iterate over all reasons for a wake word enrollment failure | `reason`, `reason-guidance`, `reason-pass`, `reason-threshold`, `reason-value` | Only within the `^fail` event callback |
 | `user-iterator` | Iterate over all enrolled users | `enrollment-count`, `user` | Any context — automatically sets the `user` setting for each iteration as you loop |
 
-**Illustrative enrollment sequence** (function names and settings per the table above — see the [`spot-enroll.c`](https://doc.sensory.com/tnl/7.8/api/sample/c/spot-enroll/) / [`live-enroll.c`](https://doc.sensory.com/tnl/7.8/api/sample/c/live-enroll/) / [`live_enroll.py`](https://doc.sensory.com/tnl/7.8/api/sample/python/live_enroll/#live_enrollpy) / [`enrollUDT.java`](https://doc.sensory.com/tnl/7.8/api/sample/java/enrollUDT/) samples included with your SDK for a complete, compilable example, including the exact stream-attachment calls, which are omitted here):
+#### 4.6.5 Illustrative Enrollment Sequence
+
+Function names and settings per the tables above — see the [`spot-enroll.c`](https://doc.sensory.com/tnl/7.8/api/sample/c/spot-enroll/) / [`live-enroll.c`](https://doc.sensory.com/tnl/7.8/api/sample/c/live-enroll/) / [`live_enroll.py`](https://doc.sensory.com/tnl/7.8/api/sample/python/live_enroll/#live_enrollpy) / [`enrollUDT.java`](https://doc.sensory.com/tnl/7.8/api/sample/java/enrollUDT/) samples included with your SDK for a complete, compilable example, including the exact stream-attachment calls, which are omitted here:
 
 ```c
 SnsrSession s;
