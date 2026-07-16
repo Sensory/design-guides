@@ -34,6 +34,7 @@
    - [5.2 Reading Results](#52-reading-results)
    - [5.3 Combining Fixed and Enrolled Models](#53-combining-fixed-and-enrolled-models)
    - [5.4 Biometric Scoring: THF/TNL vs. THF-Micro](#54-biometric-scoring-thftnl-vs-thf-micro)
+   - [5.5 Recognition Sensitivity: Operating Points and score-offset](#55-recognition-sensitivity-operating-points-and-score-offset)
 6. [Converting to a Deeply Embedded Model](#6-converting-to-a-deeply-embedded-model)
 7. [Design Guidelines](#7-design-guidelines)
    - [7.1 Recording Quality and Environment](#71-recording-quality-and-environment)
@@ -338,7 +339,7 @@ It is possible to **concurrently combine** a fixed model (recognizes anyone) and
 
 Recognizing a match with an enrolled model happens in two conceptually distinct steps:
 
-1. **Recognition** — phrase spotting, exactly like a fixed wake word model. This step alone is already speaker-biased: because the underlying model was trained (enrolled) on recordings from one speaker, it will tend to recognize that speaker's voice better than anyone else's, independent of any biometric security.
+1. **Recognition** — phrase spotting, exactly like a fixed wake word model. This step alone is already speaker-biased: because the underlying model was trained (enrolled) on recordings from one speaker, it will tend to recognize that speaker's voice better than anyone else's, independent of any biometric security. Recognition sensitivity is tunable — see [5.5](#55-recognition-sensitivity-operating-points-and-score-offset).
 2. **Verification** — an additional speaker-verification score (`sv-score`/`svScore`) compared against a threshold (`sv-threshold`/`SvThreshold`), covered below.
 
 > **Common mistake:** Setting the verification threshold to `0` disables step 2's security check, but it does **not** turn an enrolled model into a generic, "works for anyone" fixed wake word — step 1's recognition is already tuned to the enroller's voice and will continue to favor them. Enrolling multiple people, or driving the threshold to `0`, is not a substitute for a real fixed wake word model. To build a wake word that performs well across the general population, train it in **VoiceHub** (see [3.3](#33-simulated-enrolled-fixed-enrollment-sefw)) rather than through enrollment.
@@ -354,6 +355,22 @@ Speaker verification scoring (step 2 above) is enforced differently depending on
 > **Important:** Because THF/TNL enforces `sv-threshold` internally, application code does **not** need to re-check `sv-score` on a `^result` event — that check has already happened. On THF-Micro, the opposite is true: your application **must** compare `svScore` to `SvThreshold` itself before treating a match as verified, or biometric security will silently be a no-op.
 
 Confirm exact field names, struct layout, and default threshold behavior against your installed THF-Micro SDK version — see the full THF-Micro documentation at https://doc.sensory.com/thf-micro/latest/.
+
+### 5.5 Recognition Sensitivity: Operating Points and score-offset
+
+TNL enroller models come in two generations, which determine how you tune *recognition* sensitivity (step 1 in [5.4](#54-biometric-scoring-thftnl-vs-thf-micro)) for the resulting enrolled model:
+
+- **Newer enroller models** support **operating points (OPs)** — a small selectable range built into the enrolled model itself (commonly 6–14 or 7–13, with 10 as the default), trading off recognition sensitivity. Example: `udt-universal-3.67.1.snsr`.
+- **Older enroller models** have no concept of an operating point. Example: `udw-enUS-5.1.1.9-tssv.snsr`.
+
+| If the enrolled model... | Tune recognition sensitivity with |
+|---|---|
+| Supports operating points | The model's OP setting |
+| Does not support operating points | `score-offset` |
+
+`score-offset` defaults to `0` and effectively ranges about ±30. Higher values make recognition more *accepting* (looser matching, fewer false rejects); negative values make it more *rejecting* (stricter matching, fewer false accepts).
+
+> **Note:** `sv-threshold` (step 2, biometric verification — see [5.4](#54-biometric-scoring-thftnl-vs-thf-micro)) behaves identically regardless of which generation of enroller model you're using. OP and `score-offset` only affect step 1 (recognition); they have no effect on verification.
 
 ---
 
@@ -410,6 +427,7 @@ When validating an enrolled model, measure all three of the following, not just 
 - Porting a THF/TNL biometric integration to THF-Micro without adding an explicit `svScore`/`SvThreshold` check — THF-Micro doesn't enforce the threshold internally the way THF/TNL does, so the check silently becomes a no-op (see [5.4](#54-biometric-scoring-thftnl-vs-thf-micro)).
 - Planning a product around a self-service SEFW workflow — building one currently requires a Sensory FAE (see [3.3](#33-simulated-enrolled-fixed-enrollment-sefw)); budget for that dependency or use the UI-level/application-level workaround instead.
 - Trying to manufacture a generic, "works for anyone" wake word by enrolling many users and/or setting the verification threshold to `0` — recognition itself is speaker-biased from training, so this doesn't produce a real fixed wake word. Use VoiceHub instead (see [5.4](#54-biometric-scoring-thftnl-vs-thf-micro)).
+- Reaching for `score-offset` on a model that actually supports operating points, or vice versa — check which generation of enroller model produced your enrolled model before choosing a sensitivity-tuning approach (see [5.5](#55-recognition-sensitivity-operating-points-and-score-offset)).
 
 ---
 
