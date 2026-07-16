@@ -259,7 +259,6 @@ The `spot-enroll` and `live-enroll` tools are thin wrappers around the same SDK 
 | `ctx-enroll` | int | Recommended number of recordings that should include trailing context speech (see [4.2](#42-recording-guidelines)). |
 | `interactive` | int | `0` processes the stream to completion (offline mode); nonzero enables interactive re-recording of failed attempts. |
 | `enrollment-task-index` | int | Selects which sub-task receives recordings, for multi-task enrollment models. Default `0`. |
-| `delete-user` | string | Removes the named user from a loaded context model. |
 | `save-enroll-audio` | int | `1` retains raw enrollment recordings in a saved context model; `0` (default) discards them. See [7.3](#73-security-considerations). |
 
 #### 4.6.3 Enrollment Event Callbacks
@@ -286,7 +285,16 @@ Accessed via `snsrForEach`:
 | `reason-iterator` | Iterate over all reasons for a wake word enrollment failure | `reason`, `reason-guidance`, `reason-pass`, `reason-threshold`, `reason-value` | Only within the `^fail` event callback |
 | `user-iterator` | Iterate over all enrolled users | `enrollment-count`, `user` | Any context — automatically sets the `user` setting for each iteration as you loop |
 
-#### 4.6.5 Illustrative Enrollment Sequence
+#### 4.6.5 Runtime Actions
+
+| Action | Type | Description |
+|---|---|---|
+| `add-context` | int | Set to `1` if the enrollment recording should include trailing context (e.g. "Hey Sensory, will it rain tomorrow?") — see [4.2 Recording Guidelines](#42-recording-guidelines). |
+| `delete-user` | string, write-only | Deletes the named user; triggers `^enrolled`, then `^adapted` if any users remain, then `^done`. |
+| `re-adapt` | int, write-only | Set to `1` to force the adaptation step to always run, even when it would normally be skipped. |
+| `rename-user` | string, write-only | Changes the recognition result returned for `user` to the given string. |
+
+#### 4.6.6 Illustrative Enrollment Sequence
 
 Function names and settings per the tables above — see the [`spot-enroll.c`](https://doc.sensory.com/tnl/7.8/api/sample/c/spot-enroll/) / [`live-enroll.c`](https://doc.sensory.com/tnl/7.8/api/sample/c/live-enroll/) / [`live_enroll.py`](https://doc.sensory.com/tnl/7.8/api/sample/python/live_enroll/#live_enrollpy) / [`enrollUDT.java`](https://doc.sensory.com/tnl/7.8/api/sample/java/enrollUDT/) samples included with your SDK for a complete, compilable example, including the exact stream-attachment calls, which are omitted here:
 
