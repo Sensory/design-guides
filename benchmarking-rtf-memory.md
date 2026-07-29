@@ -41,10 +41,11 @@
    - [6.3 Average MIPS Measurement with perf stat](#63-average-mips-measurement-with-perf-stat)
    - [6.4 Average Memory Measurement](#64-average-memory-measurement)
    - [6.5 Benchmark Results (Raspberry Pi 4 8 GB, SDK 7.8.0)](#65-benchmark-results-raspberry-pi-4-8-gb-sdk-780)
-7. [Platform Notes: ARM NEON Extensions](#7-platform-notes-arm-neon-extensions)
-8. [Pipeline Architecture Reference](#8-pipeline-architecture-reference)
-9. [Quick Reference — Command Summary](#9-quick-reference--command-summary)
-10. [References](#10-references)
+7. [Benchmark Results Across Model Sizes](#7-benchmark-results-across-model-sizes)
+8. [Platform Notes: ARM NEON Extensions](#8-platform-notes-arm-neon-extensions)
+9. [Pipeline Architecture Reference](#9-pipeline-architecture-reference)
+10. [Quick Reference — Command Summary](#10-quick-reference--command-summary)
+11. [References](#11-references)
 
 ---
 
@@ -240,6 +241,7 @@ bin/snsr-eval -p -t vg-stt.snsr -s partial-result-interval=0 \
     data/audio/voice-genie-set-cruise-control.wav
 ```
 
+
 ```
 NLU intent: set_cruise_control (0.9968) = set the cruise control to 55 miles per hour
 NLU entity:   number (0.9937) = 55
@@ -388,7 +390,7 @@ The `ms_print` output begins with an ASCII chart of heap usage over time (x-axis
 ```
     MB
 174.5^                                                  #                     
-     |                                                  #@                    
+     |                                                  #@@@                  
      |                                                ::#@@@                  
      |                                              ::: #@@ :                 
      |                                        @ :  :: : #@@ :::               
@@ -587,6 +589,7 @@ grep MemTotal /proc/meminfo
 ```
 
 Example output:
+
 ```
 MemTotal:        7998716 kB
 ```
@@ -623,7 +626,33 @@ The STT model is loaded into memory but its inference-time buffers are not alloc
 
 ---
 
-## 7. Platform Notes: ARM NEON Extensions
+## 7. Benchmark Results Across Model Sizes
+
+Sections 4–6 walk through the benchmarking methodology using a single reference pipeline (Voice Genie + automotive-medium STT). The table below applies that same methodology — STT-slot RTF with and without partial results, plus peak and average RAM — across all 8 `opt-vg-vad-stt-enUS-*` pipelines shipped with the SDK: the automotive domain in large/medium/small, and the general domain in large/medium/small/micro/nano.
+
+| Model | Domain | Size | Model Size (MB) | RTF PRI=1000 (%) | RTF PRI=0 (%) | RTF Delta (pp) | RTF Reduction (%) | Peak RAM PRI=1000 (MB) | Peak RAM PRI=0 (MB) | Avg RAM (MB) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| automotive-large-1.3.14-B-pnc_68 | automotive | large | 237.1 | 284.55 | 133.94 | 150.61 | 52.9 | 235.9 | 216.8 | 177.7 |
+| automotive-medium-2.3.14-B-pnc_68 | automotive | medium | 95.1 | 86.32 | 39.04 | 47.28 | 54.8 | 83.2 | 87.5 | 65.5 |
+| automotive-small-2.3.14-B-pnc_68 | automotive | small | 51.3 | 45.78 | 18.60 | 27.18 | 59.4 | 83.5 | 83.6 | 65.6 |
+| general-large-2.0.3-pnc_68 | general | large | 209.1 | 276.80 | 111.21 | 165.59 | 59.8 | 77.3 | 94.0 | 40.7 |
+| general-medium-2.4.3-pnc_68 | general | medium | 70.1 | 80.86 | 35.61 | 45.25 | 56.0 | 55.0 | 59.5 | 39.4 |
+| general-small-2.2.3-pnc_68 | general | small | 29.2 | 43.92 | 16.94 | 26.98 | 61.4 | 55.2 | 55.0 | 39.4 |
+| general-micro-2.0.3_68 | general | micro | 11.8 | 24.08 | 12.51 | 11.57 | 48.0 | 42.6 | 41.6 | 33.9 |
+| general-nano-2.0.3_68 | general | nano | 7.1 | 16.47 | 7.76 | 8.71 | 52.9 | 39.5 | 39.0 | 33.9 |
+
+*Peak and average RAM figures assume the model is loaded into code space rather than the heap (§5.4) — model-file bytes are excluded from both figures so sizes are comparable across models of very different file sizes. PRI = partial-result-interval; default PRI = 1000 ms. RTF figures are for the STT slot only (slot 1), consistent with the slot-level breakdown in §4.4/4.5 — not total pipeline RTF, since slot 0 (wake word) RTF is negligible and roughly constant (~4%) across all 8 models.*
+
+**Key observations:**
+
+- **Disabling partial results cuts STT-slot RTF by 48–61% across all 8 models** — the benefit holds at every size tier, not just the largest models.
+- **Only the two large models exceed real-time STT RTF** even with partial results disabled — automotive-large at 133.9% and general-large at 111.2%. This is acceptable since STT operates over a bounded listening window rather than a continuous stream (see [Real-Time Requirements by Technology Type](#real-time-requirements-by-technology-type)), but it does add noticeable response latency.
+- **Peak and average RAM scale down cleanly with model size**, down to a floor of **~34–40 MB** for general-micro/general-nano. This floor is fixed STT/LVCSR runtime overhead (ONNX Runtime session, thread pools, decoder search-graph allocation) paid the moment *any* STT model is loaded — it is not reduced further by picking an even smaller model file.
+- **Automotive-domain models run measurably heavier than general-domain models at every matched size tier** (larger vocabulary/grammar).
+
+---
+
+## 8. Platform Notes: ARM NEON Extensions
 
 Sensory's wake word and STT models are optimized to use **ARM NEON SIMD extensions** when present on the host CPU. NEON acceleration is detected and enabled automatically at runtime — no configuration is required.
 
@@ -635,7 +664,7 @@ The **Raspberry Pi 4** (Cortex-A72) includes NEON support, and the benchmark res
 
 ---
 
-## 8. Pipeline Architecture Reference
+## 9. Pipeline Architecture Reference
 
 The `tpl-spot-vad-lvcsr` template implements the following sequential pipeline:
 
@@ -672,7 +701,7 @@ Audio Input
 
 ---
 
-## 9. Quick Reference — Command Summary
+## 10. Quick Reference — Command Summary
 
 
 
@@ -732,7 +761,7 @@ bin/snsr-eval -v -t vg-stt.snsr
 
 ---
 
-## 10. References
+## 11. References
 
 - TNL SDK 7.8 Docs: https://doc.sensory.com/tnl/7.8/
 - `snsr-eval` reference: https://doc.sensory.com/tnl/7.8/tools/snsr-eval/
