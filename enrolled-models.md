@@ -36,6 +36,8 @@
    - [5.4 Biometric Scoring: THF/TNL vs. THF-Micro](#54-biometric-scoring-thftnl-vs-thf-micro)
    - [5.5 Recognition Sensitivity: Operating Points and score-offset](#55-recognition-sensitivity-operating-points-and-score-offset)
 6. [Converting to a Deeply Embedded Model](#6-converting-to-a-deeply-embedded-model)
+   - [6.1 Compiling a Model into the Application (snsr-edit)](#61-compiling-a-model-into-the-application-snsr-edit)
+   - [6.2 Converting an Enrolled Model at Runtime (spot-convert)](#62-converting-an-enrolled-model-at-runtime-spot-convert)
 7. [Design Guidelines](#7-design-guidelines)
    - [7.1 Recording Quality and Environment](#71-recording-quality-and-environment)
    - [7.2 Choosing an Enrollment Type](#72-choosing-an-enrollment-type)
@@ -82,7 +84,16 @@ Fixed models work identically for every speaker and are set at build time. Enrol
 - TrulyHandsfree or TrulyNatural SDK installed, with the following tools accessible on your `PATH`:
   - `spot-enroll` — offline enrollment from pre-recorded audio
   - `live-enroll` — interactive enrollment from a live microphone
-- An **enroller task model**, distributed with the SDK (e.g. `udt-enUS-5.1.1.9.snsr` for user-defined enrollment, or an enrolled-fixed task model for a phrase known at build time) — or, for a simulated enrolled-fixed (SEFW) model, a VoiceHub wake word project and Sensory FAE assistance to build it (see [3.3](#33-simulated-enrolled-fixed-enrollment-sefw)).
+  - `spot-convert` — converts an enrolled model to deeply embedded format; only needed if targeting a deeply embedded platform (see [6.2](#62-converting-an-enrolled-model-at-runtime-spot-convert))
+- An **enroller task model**, distributed with the SDK. The THF SDK ships three:
+
+  | Filename | Enrollment type | Notes |
+  |---|---|---|
+  | `eft-hbg-enUS-23.0.0.9.snsr` | Enrolled-fixed (EFW) — see [3.2](#32-enrolled-fixed-enrollment) | No operating points — tune with `score-offset` (see [5.5](#55-recognition-sensitivity-operating-points-and-score-offset)) |
+  | `udt-enUS-5.1.1.9.snsr` | User-defined (UDW) — see [3.1](#31-user-defined-enrollment) | No operating points — tune with `score-offset` (see [5.5](#55-recognition-sensitivity-operating-points-and-score-offset)) |
+  | `udt-universal-3.67.1.0.snsr` | User-defined (UDW) — see [3.1](#31-user-defined-enrollment) | Supports operating points (see [5.5](#55-recognition-sensitivity-operating-points-and-score-offset)) |
+
+  — or, for a simulated enrolled-fixed (SEFW) model, a VoiceHub wake word project and Sensory FAE assistance to build it (see [3.3](#33-simulated-enrolled-fixed-enrollment-sefw)).
 - Audio recordings of the target speaker, if enrolling offline: 16-bit PCM WAV, recorded in a quiet environment (see [4.2 Recording Guidelines](#42-recording-guidelines)).
 
 > **Note:** Enrollment is on-device. Recordings and the resulting enrolled model never need to leave the local system, though some deployments do transfer the *recordings* to a more powerful machine to run the enroller there before shipping the resulting enrolled model back to the device — see [7.4 CPU and Memory Budgeting](#74-cpu-and-memory-budgeting).
@@ -225,7 +236,7 @@ There is no limit on the number of users that can be enrolled at once.
 
 The `spot-enroll` and `live-enroll` tools are thin wrappers around the same SDK inference API used everywhere else in THF/TNL, built around a session handle (`SnsrSession`) that you create, configure, feed audio, and read results/state from. The table below summarizes the relevant calls and settings; consult the **Inference & I/O** and **Setting Keys** sections of the API reference at `doc.sensory.com` and the `snsr.h` header in your installed SDK for exact prototypes, since these can shift slightly between SDK versions.
 
-**Core session functions used during enrollment:**
+#### 4.6.1 Core Session Functions Used During Enrollment
 
 | Function | Purpose |
 |---|---|
@@ -238,7 +249,7 @@ The `spot-enroll` and `live-enroll` tools are thin wrappers around the same SDK 
 | `snsrRC` / `snsrRCMessage` | Check and describe the session's error state |
 | `snsrRelease` | Release the session handle |
 
-**Enrollment settings keys:**
+#### 4.6.2 Configuration Settings Keys
 
 | Key | Type | Description |
 |---|---|---|
@@ -248,21 +259,62 @@ The `spot-enroll` and `live-enroll` tools are thin wrappers around the same SDK 
 | `ctx-enroll` | int | Recommended number of recordings that should include trailing context speech (see [4.2](#42-recording-guidelines)). |
 | `interactive` | int | `0` processes the stream to completion (offline mode); nonzero enables interactive re-recording of failed attempts. |
 | `enrollment-task-index` | int | Selects which sub-task receives recordings, for multi-task enrollment models. Default `0`. |
-| `delete-user` | string | Removes the named user from a loaded context model. |
 | `save-enroll-audio` | int | `1` retains raw enrollment recordings in a saved context model; `0` (default) discards them. See [7.3](#73-security-considerations). |
 
-**Enrollment event callbacks:**
+#### 4.6.3 Enrollment Event Callbacks
 
 | Event | Fired when |
 |---|---|
 | `^pass` | A recording passes the audio check |
 | `^fail` | A recording fails the audio check |
 | `^next` | The session is ready for the next recording |
+| `^pause` | A time-consuming processing step is about to start — use this to pause the input stream during interactive enrollment |
+| `^progress` | Reports adaptation progress (`percent-done`) |
+| `^resume` | A time-consuming processing step has completed — use this to restart an input stream that was stopped on `^pause` |
 | `^enrolled` | Enrollment for a user/phrase completes |
 | `^adapted` | A context model has been adapted into a new enrolled model |
 | `^done` | The overall enrollment run completes |
 
-**Illustrative enrollment sequence** (function names and settings per the table above — see the `spot-enroll.c` / `live-enroll.c` / `live_enroll.py` / `enrollUDT.java` samples included with your SDK for a complete, compilable example, including the exact stream-attachment calls, which are omitted here):
+#### 4.6.4 Enrollment Iterators
+
+Accessed via `snsrForEach`:
+
+| Iterator | Description | Exposed fields | Availability |
+|---|---|---|---|
+| `enrollment-iterator` | Iterate over all wake word enrollments for the current user | `audio-stream`, `audio-stream-first`, `audio-stream-last`, `begin-sample`, `end-sample`, `enrollment-id`, `user` | Any context — use to retrieve enrollment audio when `save-enroll-audio` is enabled |
+| `reason-iterator` | Iterate over all reasons for a wake word enrollment failure | `reason`, `reason-guidance`, `reason-pass`, `reason-threshold`, `reason-value` | Only within the `^fail` event callback |
+| `user-iterator` | Iterate over all enrolled users | `enrollment-count`, `user` | Any context — automatically sets the `user` setting for each iteration as you loop |
+
+#### 4.6.5 Runtime Actions
+
+| Action | Type | Description |
+|---|---|---|
+| `add-context` | int | Set to `1` if the enrollment recording should include trailing context (e.g. "Hey Sensory, will it rain tomorrow?") — see [4.2 Recording Guidelines](#42-recording-guidelines). |
+| `delete-user` | string, write-only | Deletes the named user; triggers `^enrolled`, then `^adapted` if any users remain, then `^done`. |
+| `re-adapt` | int, write-only | Set to `1` to force the adaptation step to always run, even when it would normally be skipped. |
+| `rename-user` | string, write-only | Changes the recognition result returned for `user` to the given string. |
+
+#### 4.6.6 Enroller Status/Results
+
+Read-only result fields, available within specific event callbacks or iterators as noted:
+
+| Key | Type | Available in | Description |
+|---|---|---|---|
+| `enrollment-count` | int | `enrollment-iterator`, `user-iterator` | The number of recordings accumulated for the enrolled user. |
+| `enrollment-id` | int | `^fail`, `^pass`, `enrollment-iterator` | A unique ID for the current user's current enrollment. |
+| `model-stream` | stream | `^done` | The resulting model that will recognize the enrolled phrases. |
+| `percent-done` | double | `^progress` | Estimated enrollment task completion progress, `0`–`100`. |
+| `reason` | string | `^fail`, `reason-iterator` | Shorthand indication of why an enrollment recording was rejected. |
+| `reason-guidance` | string | `^fail`, `reason-iterator` | Human-readable (English) suggestion for correcting an enrollment failure. |
+| `reason-pass` | int | `^fail`, `reason-iterator` | `1` if the enrollment passed, `0` if it was rejected. |
+| `reason-threshold` | double | `^fail`, `reason-iterator` | The threshold value an enrollment check compared against. |
+| `reason-value` | double | `^fail`, `reason-iterator` | The value of the enrollment check parameter, compared against `reason-threshold`. |
+| `user-count` | int | `^adapted`, `^new-user` | The number of distinct enrolled users. |
+| `user-index` | int | `user-iterator` | The index of the current item in the user list iteration. |
+
+#### 4.6.7 Illustrative Enrollment Sequence
+
+Function names and settings per the tables above — see the [`spot-enroll.c`](https://doc.sensory.com/tnl/7.8/api/sample/c/spot-enroll/) / [`live-enroll.c`](https://doc.sensory.com/tnl/7.8/api/sample/c/live-enroll/) / [`live_enroll.py`](https://doc.sensory.com/tnl/7.8/api/sample/python/live_enroll/#live_enrollpy) / [`enrollUDT.java`](https://doc.sensory.com/tnl/7.8/api/sample/java/enrollUDT/) samples included with your SDK for a complete, compilable example, including the exact stream-attachment calls, which are omitted here:
 
 ```c
 SnsrSession s;
@@ -329,8 +381,6 @@ The recognizer raises a `^result` event when a final recognition hypothesis is a
 
 > **Design guidance:** On THF/TNL, don't re-implement threshold logic in application code — set `sv-threshold` on the session and let the SDK enforce it (see [5.4](#54-biometric-scoring-thftnl-vs-thf-micro)). THF-Micro works differently and requires an explicit check; see the same section.
 
-Related VAD/timing events (`^begin`, `^end`, `^limit`, `^silence`) fire during recognition the same way they do for any wake word or command task and can be used for endpointing/UX feedback independent of the final result.
-
 ### 5.3 Combining Fixed and Enrolled Models
 
 It is possible to **concurrently combine** a fixed model (recognizes anyone) and an enrolled model (recognizes a specific speaker) — even for the same target phrase. In this configuration, the enrolled speaker is matched by both the fixed and enrolled models, while any other speaker is matched only by the fixed model. This is a common pattern for adding an optional "recognize me specifically" tier on top of baseline recognition that works for everyone.
@@ -360,12 +410,12 @@ Confirm exact field names, struct layout, and default threshold behavior against
 
 TNL enroller models come in two generations, which determine how you tune *recognition* sensitivity (step 1 in [5.4](#54-biometric-scoring-thftnl-vs-thf-micro)) for the resulting enrolled model:
 
-- **Newer enroller models** support **operating points (OPs)** — a small selectable range built into the enrolled model itself (commonly 6–14 or 7–13, with 10 as the default), trading off recognition sensitivity. Example: `udt-universal-3.67.1.snsr`.
-- **Older enroller models** have no concept of an operating point. Example: `udw-enUS-5.1.1.9-tssv.snsr`.
+- **Newer enroller models** support **operating points (OPs)** — a small selectable range built into the enrolled model itself (commonly 6–14 or 7–13, with 10 as the default), trading off recognition sensitivity. Example: `udt-universal-3.67.1.0.snsr`.
+- **Older enroller models** have no concept of an operating point. Examples: `udt-enUS-5.1.1.9.snsr` and `eft-hbg-enUS-23.0.0.9.snsr`.
 
 | If the enrolled model... | Tune recognition sensitivity with |
 |---|---|
-| Supports operating points | The model's OP setting |
+| Supports operating points | `operating-point` |
 | Does not support operating points | `score-offset` |
 
 `score-offset` defaults to `0` and effectively ranges about ±30. Higher values make recognition more *accepting* (looser matching, fewer false rejects); negative values make it more *rejecting* (stricter matching, fewer false accepts).
@@ -376,13 +426,37 @@ TNL enroller models come in two generations, which determine how you tune *recog
 
 ## 6. Converting to a Deeply Embedded Model
 
-An enrolled model loaded from a file at runtime is held in heap memory, the same as any other `.snsr` model. On memory-constrained embedded targets, it can instead be converted to a C array and linked directly into the executable's read-only data segment, removing it from the heap entirely — the same technique used for any pipeline model, described in detail in [Benchmarking RTF and Avg/Max Memory Usage §5.4](benchmarking-rtf-memory.md#54-reducing-heap-usage-by-embedding-the-model-in-code-space):
+There are two distinct ways to convert a `.snsr` model to run on a deeply embedded target (e.g. a standalone DSP running THF-Micro), and they serve different purposes.
+
+### 6.1 Compiling a Model into the Application (snsr-edit)
+
+Any model loaded from a file at runtime is held in heap memory. On memory-constrained embedded targets, it can be converted to a C array and linked directly into the executable's read-only data segment, removing it from the heap entirely — the same technique used for any pipeline model, described in detail in [Benchmarking RTF and Avg/Max Memory Usage §5.4](benchmarking-rtf-memory.md#54-reducing-heap-usage-by-embedding-the-model-in-code-space):
 
 ```bash
 snsr-edit -c user1-model.c -t user1.snsr
 ```
 
 Study the `spot-data.c` sample included with the SDK (`sample/c/`) for how to pass embedded model data to the SDK via the data API instead of a file path.
+
+> **Note:** For **enrolled models specifically, this is uncommon.** Compiling an enrolled model into the application hard-codes that one person's enrollment into the firmware image at build time — the app will only ever recognize whoever was enrolled when the binary was compiled. That's rarely what you want, since enrollment normally happens per end user, on their own device. Reach for this only if you genuinely intend to ship a fixed, factory-enrolled voice.
+
+### 6.2 Converting an Enrolled Model at Runtime (spot-convert)
+
+The more common path for enrolled models is `spot-convert`, which converts a `.snsr` model to deeply embedded format directly, without compiling it into the application. This keeps enrollment a runtime, per-user operation — the conversion can be run as part of an on-device enrollment flow — rather than baking one person's voice into the firmware image.
+
+```
+spot-convert -t task [options] target
+```
+
+- `task` — the `.snsr` file to convert (typically the enrolled model)
+- `target` — a 4- or 5-character deeply embedded target code identifying the destination platform/format
+
+| Enrolled model built from... | Common target code |
+|---|---|
+| An older enroller model (e.g. `udt-enUS-5.1.1.9.snsr`) | `pc38` |
+| A newer enroller model (e.g. `udt-universal-3.67.1.0.snsr`) | `pc62w` |
+
+Target codes are platform- and SDK-version-specific; confirm the current code for your target against `doc.sensory.com` or with your Sensory FAE. See [Output Formats and DSP Platform Versions](https://doc.sensory.com/thf-micro/latest/VoiceHub%20Versions.html) for the current list.
 
 This is particularly relevant for enrolled models: as noted in [7.4](#74-cpu-and-memory-budgeting), enrollment itself is comparatively expensive, but the *resulting* enrolled model is small and cheap to run — small enough that it's often converted this way and deployed to a low-power standalone DSP running THF-Micro, separate from the (typically more capable) hardware used to perform the enrollment itself.
 
@@ -428,6 +502,7 @@ When validating an enrolled model, measure all three of the following, not just 
 - Planning a product around a self-service SEFW workflow — building one currently requires a Sensory FAE (see [3.3](#33-simulated-enrolled-fixed-enrollment-sefw)); budget for that dependency or use the UI-level/application-level workaround instead.
 - Trying to manufacture a generic, "works for anyone" wake word by enrolling many users and/or setting the verification threshold to `0` — recognition itself is speaker-biased from training, so this doesn't produce a real fixed wake word. Use VoiceHub instead (see [5.4](#54-biometric-scoring-thftnl-vs-thf-micro)).
 - Reaching for `score-offset` on a model that actually supports operating points, or vice versa — check which generation of enroller model produced your enrolled model before choosing a sensitivity-tuning approach (see [5.5](#55-recognition-sensitivity-operating-points-and-score-offset)).
+- Using `snsr-edit -c` to embed an enrolled model, unintentionally hard-coding a single person's voice into the shipped firmware — `spot-convert` is the right tool for a deeply embedded target that still needs per-user enrollment (see [6.2](#62-converting-an-enrolled-model-at-runtime-spot-convert)).
 
 ---
 
@@ -456,8 +531,12 @@ spot-enroll -t udt-universal-3.66.1.9.snsr \
     +user1 user11.wav user12.wav user13.wav user14.wav \
     +user2 user21.wav user22.wav user23.wav user24.wav
 
-# Convert an enrolled model to an embeddable C array
+# Compile an enrolled model into the application (hard-codes one user — see 6.1)
 snsr-edit -c user1-model.c -t user1.snsr
+
+# Convert an enrolled model to deeply embedded format at runtime (typical for enrolled models)
+spot-convert -t user1.snsr pc38    # older enroller models (e.g. udt-enUS-5.1.1.9.snsr)
+spot-convert -t user1.snsr pc62w   # newer enroller models
 ```
 
 ---
@@ -467,9 +546,12 @@ snsr-edit -c user1-model.c -t user1.snsr
 - TNL SDK 7.8 Docs: https://doc.sensory.com/tnl/7.8/
 - `spot-enroll` reference: https://doc.sensory.com/tnl/7.8/tools/spot-enroll/
 - `live-enroll` reference: https://doc.sensory.com/tnl/7.8/tools/live-enroll/
+- `spot-convert` reference: https://doc.sensory.com/tnl/7.8/tools/spot-convert/
 - Enrollment model types: https://doc.sensory.com/tnl/7.8/models/types/enroll/
 - Inference & I/O API: https://doc.sensory.com/tnl/7.8/api/inference/
 - Setting keys reference: https://doc.sensory.com/tnl/7.8/api/setting-keys/
 - Runtime event keys: https://doc.sensory.com/tnl/7.8/api/setting-keys/events/
+- Iterator keys: https://doc.sensory.com/tnl/7.8/api/setting-keys/iterators/#enrollment--adaptation
+- Result keys: https://doc.sensory.com/tnl/7.8/api/setting-keys/results/
 - THF-Micro Docs: https://doc.sensory.com/thf-micro/latest/
 - [Benchmarking RTF and Avg/Max Memory Usage](benchmarking-rtf-memory.md) — for measuring enrolled-model runtime cost and embedding models in code space
