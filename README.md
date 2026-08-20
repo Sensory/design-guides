@@ -28,4 +28,14 @@ How to create and use enrolled models with Sensory THF/TNL — training custom u
 
 ---
 
+### [Measuring Word Error Rate (WER) for TrulyNatural STT Models](measuring-stt-wer.md)
+
+How to measure the word error rate (WER) of a TNL STT model against a labeled audio corpus using `snsr-eval-batch` — obtaining a standalone STT task file (either downloaded directly or extracted from an assembled pipeline with `snsr-edit`), preparing a test corpus with reference transcripts, generating the CSV manifest `snsr-eval-batch` requires, and interpreting the resulting substitution/insertion/deletion and WER figures. Covers SDK-version differences in audio format support (FLAC vs. WAV) and common pitfalls like inconsistent normalization between runs.
+
+**Applies to:** TrulyNatural (TNL) SDK — 7.9.0+ recommended, 7.8.0 also supported
+**Platform:** PC/workstation (Windows, Linux, or macOS) — not an embedded-target measurement
+**Models used:** TNL STT models (e.g. `stt-enUS-general-*.snsr`, `stt-enUS-automotive-*.snsr`)
+
+---
+
 *For questions or access requests, contact your Sensory FAE.*
