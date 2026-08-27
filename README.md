@@ -28,6 +28,16 @@ How to create and use enrolled models with Sensory THF/TNL — training custom u
 
 ---
 
+### [How to Save Debug Audio and Data in THF/TNL](debug-audio-capture.md)
+
+How to capture the exact audio and event data a THF/TNL model saw on a customer's device using the `tpl-spot-debug` template — primarily by wrapping a live session at runtime in an Android/iOS app (following the SDK's `snsr-debug` sample), with a command-line model-swap alternative for PC bench testing — then extract and replay it in simulation with `snsr-log-split`, `snsr-eval`, and `audio-check`. Covers slot-addressing changes introduced by the debug wrapper, on-device storage location trade-offs, a lightweight in-memory alternative for storage-constrained devices, and the security/privacy handling required since this tool intentionally breaks Sensory's all-edge, nothing-saved design philosophy.
+
+**Applies to:** TrulyHandsfree (THF), TrulyNatural (TNL) SDKs — THF/TNL 6.x+ / 7.6.1 / 7.7.0 / 7.8.0+
+**Platform:** All THF/TNL-supported platforms
+**Models used:** `tpl-spot-debug-1.5.1.snsr` wrapping any wake word, command, or enrolled phrase-spotter model
+
+---
+
 ### [Measuring Word Error Rate (WER) for TrulyNatural STT Models](measuring-stt-wer.md)
 
 How to measure the word error rate (WER) of a TNL STT model against a labeled audio corpus using `snsr-eval-batch` — obtaining a standalone STT task file (either downloaded directly or extracted from an assembled pipeline with `snsr-edit`), preparing a test corpus with reference transcripts, generating the CSV manifest `snsr-eval-batch` requires, and interpreting the resulting substitution/insertion/deletion and WER figures. Covers SDK-version differences in audio format support (FLAC vs. WAV) and common pitfalls like inconsistent normalization between runs.
