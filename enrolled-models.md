@@ -3,7 +3,7 @@
 **Product:** TrulyHandsfree (THF) and TrulyNatural (TNL) SDKs
 **Models:** Enrollment task models (`udt-*.snsr`, `eft-*.snsr`) and the enrolled models they produce
 **Version:** THF / TNL 6+, 7+
-**Document Version:** 1.0.0
+**Document Version:** 1.0.1
 **Audience:** External developers and integration partners
 **Status:** Released under NDA — Do not distribute
 
