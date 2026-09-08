@@ -104,7 +104,7 @@ Fixed models work identically for every speaker and are set at build time. Enrol
 
 Sensory supports three enrollment types: two selected by which enroller task model you use — **user-defined (UDW)** and **enrolled-fixed (EFW)** — plus a hybrid, **simulated enrolled-fixed (SEFW)**, built by combining the two.
 
-> **Note — terminology:** Sensory historically called wake words "triggers," so you may still see **UDT** (User-Defined Trigger) used interchangeably with **UDW** (User-Defined Wake word), and **EFT** (Enrolled-Fixed Trigger) interchangeably with **EFW** (Enrolled-Fixed Wake word). This guide uses **UDW** and **EFW** throughout, since "wake word" is Sensory's current terminology — the one exception is enroller task model filenames, which still use the older `udt-`/`eft-` prefixes (e.g. `udt-enUS-5.1.1.9.snsr`).
+> **Note:** Sensory historically called wake words "triggers," so you may still see **UDT** (User-Defined Trigger) used interchangeably with **UDW** (User-Defined Wake word), and **EFT** (Enrolled-Fixed Trigger) interchangeably with **EFW** (Enrolled-Fixed Wake word). This guide uses **UDW** and **EFW** throughout, since "wake word" is Sensory's current terminology — the one exception is enroller task model filenames, which still use the older `udt-`/`eft-` prefixes (e.g. `udt-enUS-5.1.1.9.snsr`).
 
 ### 3.1 User-Defined Enrollment
 
@@ -232,7 +232,7 @@ spot-enroll -t udt-universal-3.66.1.9.snsr \
 
 There is no limit on the number of users that can be enrolled at once.
 
-> **Important — security note:** A context model can optionally retain the original enrollment recordings (`-s save-enroll-audio=1`), which is useful for replacing a questionable recording without re-recording everyone. For voice biometric deployments, treat this setting with care — retained raw voice recordings are sensitive data. See [7.3 Security Considerations](#73-security-considerations).
+> **Important:** A context model can optionally retain the original enrollment recordings (`-s save-enroll-audio=1`), which is useful for replacing a questionable recording without re-recording everyone. For voice biometric deployments, treat this setting with care — retained raw voice recordings are sensitive data. See [7.3 Security Considerations](#73-security-considerations).
 
 ### 4.6 Enrolling Programmatically via the API
 
