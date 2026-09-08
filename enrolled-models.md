@@ -125,6 +125,8 @@ A **Simulated EFW (SEFW)** is a hybrid: from the end user's perspective it behav
 1. Create a wake word project for the target phrase in **VoiceHub**, Sensory's model-authoring portal.
 2. Download the resulting fixed wake word (FW) model from that project and combine it with a UDW enroller model. The result is technically still a UDW enroller, but restricted to only accept recordings of the exact target phrase defined in the VoiceHub job.
 
+> **Note — language:** VoiceHub wake word models are **language-specific** — you must choose the target language for the wake word from the Language dropdown when creating the project. Native speakers of other languages may be able to pronounce the phrase accurately enough to be accepted during enrollment, but this can't be guaranteed. For best results, select the language your speakers will use primarily or most often. This applies only to the VoiceHub-generated FW model — the UDW enroller model it's combined with is universal and can enroll speakers in any language.
+
 > **Note:** As of this writing, combining a FW model with a UDW enroller to produce a SEFW model can only be done by a Sensory FAE — it isn't yet a self-service step for developers, though Sensory is working to remove this limitation. It's an option where a development or support agreement is in place; ask your FAE to build the SEFW model for you.
 
 **Without FAE involvement**, you can approximate the same restriction two ways:
