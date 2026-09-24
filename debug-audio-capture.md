@@ -1,13 +1,14 @@
 # Capturing Debug Audio and Data in THF/TNL
 
-**Product:** TrulyHandsfree (THF) / TrulyNatural (TNL) SDK
-**Models:** `tpl-spot-debug` (debug template), wrapping any wake word, command, or enrolled phrase-spotter model
-**Version:** THF/TNL 6.x+ / 7.6.1 / 7.7.0 / 7.8.0+ (`tpl-spot-debug-1.5.1.snsr` shown below — the template's own version number increments independently of the SDK version, so always use the copy shipped with your installed SDK)
-**Document Version:** 1.1.0
-**Audience:** Field Application Engineers, Customer Integration Engineers
-**Status:** Released under NDA — Do not distribute
+**Product:** TrulyHandsfree (THF) / TrulyNatural (TNL) SDK  
+**Models:** `tpl-spot-debug` (debug template), wrapping any wake word, command, or enrolled phrase-spotter model  
+**Version:** THF/TNL 6.x+ / 7.6.1 / 7.7.0 / 7.8.0+ (`tpl-spot-debug-1.5.1.snsr` shown below — the template's own version number increments independently of the SDK version, so always use the copy shipped with your installed SDK)  
+**Document Version:** 1.1.0  
+**Last Modified:** 2026-08-26  
+**Audience:** Field Application Engineers, Customer Integration Engineers  
+**Status:** Released
 
-*Copyright © 2026 Sensory Inc. All rights reserved. This document is confidential and proprietary to Sensory Inc. It may not be reproduced, distributed, or disclosed to any third party without prior written permission from Sensory Inc.*
+*Copyright © 2026 Sensory Inc. All rights reserved.*
 
 ---
 

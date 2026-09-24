@@ -1,13 +1,14 @@
 # Creating and Using Enrolled Models with Sensory TrulyHandsfree/TrulyNatural
 
-**Product:** TrulyHandsfree (THF) and TrulyNatural (TNL) SDKs
-**Models:** Enrollment task models (`udt-*.snsr`, `eft-*.snsr`) and the enrolled models they produce
-**Version:** THF / TNL 6+, 7+
-**Document Version:** 1.0.1
-**Audience:** External developers and integration partners
-**Status:** Released under NDA — Do not distribute
+**Product:** TrulyHandsfree (THF) and TrulyNatural (TNL) SDKs  
+**Models:** Enrollment task models (`udt-*.snsr`, `eft-*.snsr`) and the enrolled models they produce  
+**Version:** THF / TNL 6+, 7+  
+**Document Version:** 1.0.1  
+**Last Modified:** 2026-09-08  
+**Audience:** External developers and integration partners  
+**Status:** Released
 
-*Copyright © 2026 Sensory Inc. All rights reserved. This document is confidential and proprietary to Sensory Inc. It may not be reproduced, distributed, or disclosed to any third party without prior written permission from Sensory Inc.*
+*Copyright © 2026 Sensory Inc. All rights reserved.*
 
 ---
 

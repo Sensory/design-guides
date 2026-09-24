@@ -1,13 +1,14 @@
 # Getting Started with Sensory THF and TNL Lite/STT SDKs
 
-**Product:** TrulyHandsfree (THF) — wake words and voice commands; TrulyNatural Lite / TNL STT — speech-to-text (LVCSR)
-**Models:** Any THF/TNL wake word (`spot-*.snsr`), command, or STT (`stt-*.snsr`) model shipped with your SDK download
-**Version:** THF 5.x+ / TNL 7.8.0+ (7.9.0 recommended — see [1.6](#16-a-note-on-terminology-tnl-lite-tnl-stt-and-the-79-grammar-blur))
-**Document Version:** 1.0.0
-**Audience:** Developers new to Sensory's SDKs — hackathon participants, evaluation/trial licensees, and anyone doing a first integration
-**Status:** Released under NDA — Do not distribute
+**Product:** TrulyHandsfree (THF) — wake words and voice commands; TrulyNatural Lite / TNL STT — speech-to-text (LVCSR)  
+**Models:** Any THF/TNL wake word (`spot-*.snsr`), command, or STT (`stt-*.snsr`) model shipped with your SDK download  
+**Version:** THF 5.x+ / TNL 7.8.0+ (7.9.0 recommended — see [1.6](#16-a-note-on-terminology-tnl-lite-tnl-stt-and-the-79-grammar-blur))  
+**Document Version:** 1.0.0  
+**Last Modified:** 2026-09-24  
+**Audience:** Developers new to Sensory's SDKs — hackathon participants, evaluation/trial licensees, and anyone doing a first integration  
+**Status:** Released
 
-*Copyright © 2026 Sensory Inc. All rights reserved. This document is confidential and proprietary to Sensory Inc. It may not be reproduced, distributed, or disclosed to any third party without prior written permission from Sensory Inc.*
+*Copyright © 2026 Sensory Inc. All rights reserved.*
 
 ---
 
