@@ -4,10 +4,11 @@
 **Models:** Voice Genie wake word + Automotive STT pipeline  
 **Version:** 7.6.1 / 7.7.0 / 7.8.0+  
 **Document Version:** 1.0.0  
+**Last Modified:** 2026-07-29  
 **Audience:** Field Application Engineers, Customer Integration Engineers  
-**Status:** Released under NDA — Do not distribute
+**Status:** Released
 
-*Copyright © 2026 Sensory Inc. All rights reserved. This document is confidential and proprietary to Sensory Inc. It may not be reproduced, distributed, or disclosed to any third party without prior written permission from Sensory Inc.*
+*Copyright © 2026 Sensory Inc. All rights reserved.*
 
 ---
 

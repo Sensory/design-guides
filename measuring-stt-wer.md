@@ -1,13 +1,14 @@
 # Measuring Word Error Rate (WER) for TrulyNatural STT Models
 
-**Product:** TrulyNatural (TNL) SDK
-**Models:** TNL STT models (e.g. `stt-enUS-general-*.snsr`, `stt-enUS-automotive-*.snsr`)
-**Version:** TNL SDK 7.9.0+ recommended (`snsr-eval-batch`); 7.8.0 also supported with the caveats in [2.1](#21-sdktool-version)
-**Document Version:** 1.0.0
-**Audience:** Field Application Engineers, Customer Integration Engineers
-**Status:** Released under NDA — Do not distribute
+**Product:** TrulyNatural (TNL) SDK  
+**Models:** TNL STT models (e.g. `stt-enUS-general-*.snsr`, `stt-enUS-automotive-*.snsr`)  
+**Version:** TNL SDK 7.9.0+ recommended (`snsr-eval-batch`); 7.8.0 also supported with the caveats in [2.1](#21-sdktool-version)  
+**Document Version:** 1.0.0  
+**Last Modified:** 2026-08-20  
+**Audience:** Field Application Engineers, Customer Integration Engineers  
+**Status:** Released
 
-*Copyright © 2026 Sensory Inc. All rights reserved. This document is confidential and proprietary to Sensory Inc. It may not be reproduced, distributed, or disclosed to any third party without prior written permission from Sensory Inc.*
+*Copyright © 2026 Sensory Inc. All rights reserved.*
 
 ---
 

@@ -2,8 +2,6 @@
 
 Technical design guides for Sensory TrulyHandsfree (THF) and TrulyNatural (TNL) SDK integration.
 
-These guides are confidential and shared under NDA. Do not distribute.
-
 ---
 
 ## Available Guides
