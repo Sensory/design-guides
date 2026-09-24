@@ -8,6 +8,16 @@ These guides are confidential and shared under NDA. Do not distribute.
 
 ## Available Guides
 
+### [Getting Started with Sensory THF and TNL Lite/STT SDKs](getting-started-thf-tnl.md)
+
+An onboarding overview for developers new to Sensory's SDKs — what THF and TNL Lite/TNL STT each provide, how wake words, voice commands, speech-to-text, and voice biometrics map onto those two product families, how to install the SDK and activate a license, and where to find sample code, domain-specific models (automotive, IoT, wearables), and the rest of this repo's deeper how-to guides. Start here before the guides below.
+
+**Applies to:** TrulyHandsfree (THF), TrulyNatural Lite/TNL STT SDKs — THF 5.x+ / TNL 7.8.0+ (7.9.0 recommended)
+**Platform:** Windows, Linux, macOS (development); iOS, Android (deployment via platform bindings)
+**Models used:** Any pre-trained wake word, command, or STT model shipped with the SDK
+
+---
+
 ### [Benchmarking RTF and Avg/Max Memory Usage](benchmarking-rtf-memory.md)
 
 How to measure real-time factor (RTF), MIPS, and memory usage for Sensory THF/TNL models using `snsr-eval`, `perf stat`, Valgrind `massif`, and standard Linux utilities. Covers peak and average CPU load, worst-case and steady-state memory, and MIPS measurement for continuous-listening wake word deployments.

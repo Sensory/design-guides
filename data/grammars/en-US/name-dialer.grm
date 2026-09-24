@@ -1,0 +1,9 @@
+###
+### Name Dialer Example Grammar
+### Save as: data/grammars/en-US/name-dialer.grm
+###
+
+callee = {known_contact ~known_names} | {random_name <dictation/>};
+call = call {callee};
+
+grammar = <s> {call} </s>;
