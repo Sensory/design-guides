@@ -338,8 +338,8 @@ The TNL SDK installs with a default general-domain STT model already in `model/`
 ```bash
 bin/snsr-edit -o model/opt-vg-vad-stt-enUS-automotive-medium-2.3.5-nlu-pnc.snsr \
     -t model/tpl-opt-spot-vad-lvcsr-1.29.0.snsr \
-    -f 0 model/spot-voicegenie-enUS-6.6.0-m.snsr \
-    -f 1 model/stt-enUS-automotive-medium-2.3.5-nlu-pnc.snsr
+    -f phrasespot model/spot-voicegenie-enUS-6.6.0-m.snsr \
+    -f lvcsr model/stt-enUS-automotive-medium-2.3.5-nlu-pnc.snsr
 ```
 
 ```bash
@@ -408,8 +408,8 @@ g = <s> {call_command call} {callee <dictation/>} </s>;
 
 ```bash
 bin/snsr-eval -v -v -t model/tpl-opt-spot-vad-lvcsr-1.29.0.snsr \
-    -f 0 model/spot-voicegenie-enUS-6.6.0-m.snsr \
-    -f 1 model/stt-enUS-general-medium-2.4.5-pnc.snsr \
+    -f phrasespot model/spot-voicegenie-enUS-6.6.0-m.snsr \
+    -f lvcsr model/stt-enUS-general-medium-2.4.5-pnc.snsr \
     -f grammar-stream data/grammars/en-US/call.grm \
     -s partial-result-interval=0 \
     data/audio/voice-genie-call.wav
@@ -634,8 +634,8 @@ Wrap the general STT model with the Voice Genie wake word using `tpl-opt-spot-va
 
 ```bash
 bin/snsr-edit -t model/tpl-opt-spot-vad-lvcsr-1.29.0.snsr \
-    -f 0 model/spot-voicegenie-enUS-6.6.0-m.snsr \
-    -f 1 model/stt-enUS-general-medium-2.4.5-pnc.snsr \
+    -f phrasespot model/spot-voicegenie-enUS-6.6.0-m.snsr \
+    -f lvcsr model/stt-enUS-general-medium-2.4.5-pnc.snsr \
     -f grammar-stream data/grammars/en-US/name-dialer.grm \
     -f phrases-stream.known_names data/grammars/en-US/known-names.txt \
     -o model/opt-vg-name-dialer.snsr
@@ -712,7 +712,7 @@ bin/snsr-eval
 
 # 2. Try the pre-trained models against the sample audio in data/audio/ (Section 4):
 bin/snsr-eval -v -t model/spot-voicegenie-enUS-6.6.0-m.snsr data/audio/voice-genie-set-cruise-control.wav
-bin/snsr-edit -o vg-automotive.snsr -t model/tpl-opt-spot-vad-lvcsr-1.29.0.snsr -f 0 model/spot-voicegenie-enUS-6.6.0-m.snsr -f 1 model/stt-enUS-automotive-medium-2.3.5-nlu-pnc.snsr
+bin/snsr-edit -o vg-automotive.snsr -t model/tpl-opt-spot-vad-lvcsr-1.29.0.snsr -f phrasespot model/spot-voicegenie-enUS-6.6.0-m.snsr -f lvcsr model/stt-enUS-automotive-medium-2.3.5-nlu-pnc.snsr
 bin/snsr-eval -v -t vg-automotive.snsr -s partial-result-interval=0 data/audio/voice-genie-set-cruise-control.wav
 
 # 3. Pick your path based on what you're building:
