@@ -1,0 +1,37 @@
+###
+### Hotel Concierge / Room Service Example Grammar
+### Save as: data/grammars/en-US/hotel-concierge.grm
+###
+
+import "system.grm";
+
+# Room service food and drink ordering, reusing the system library's
+# general-purpose ordering phrases ("may I have", "I'd like", "can I get two", etc.).
+pizza = (personal | small | medium | large)? (cheese | pepperoni | sausage | combination)? pizza;
+side = (fries | onion? rings | fruit);
+burger = (hamburger | cheeseburger);
+burger_meal = {burger} [with {side}];
+salad = (caesar | green | cobb | shrimp | big)? salad;
+breakfast = ((eggs | pancakes | waffles | toast | (orange | apple)? juice | coffee | tea) [and])*;
+menu_item = club sandwich | {breakfast} | {salad} | {burger_meal} | {pizza} | bottle of water | ice;
+order_room_service = $s.ordering {menu_item};
+
+# Requests for extra amenities (towels, pillows, toiletries, etc.).
+amenity = towels | pillows | blankets | toiletries | shampoo | soap | hangers;
+request_amenity = [please] ($s.ordering [extra | more] {amenity} | (can | could) [I] (get | have) [extra | more] {amenity}) [please];
+
+# Housekeeping requests.
+housekeeping = [please] ((send up? | get me) housekeeping up? | (clean | make up) my room | I need my room cleaned) [please];
+
+# Wake-up calls, reusing the system library's time-expression class.
+wake_up_call = [please] (wake [me] [up] at ~s.time [tomorrow] | [please] set a wake up call for ~s.time [tomorrow]) [please];
+
+# Do Not Disturb toggle, reusing the system library's on/off phrasing.
+do_not_disturb = [please] $s.on-off do not disturb [sign] | do not disturb;
+
+# Front-desk / concierge questions.
+checkout_query = ~s.when-queries checkout | what time (is | do I have to) check out;
+amenity_location = pool | gym | fitness center | spa | restaurant | bar | business center | parking | front desk | concierge [desk];
+location_query = ~s.location-queries [the] {amenity_location} | ~s.noun-queries [the] {amenity_location};
+
+grammar = <s> ( {order_room_service} | {request_amenity} | {housekeeping} | {wake_up_call} | {do_not_disturb} | {checkout_query} | {location_query} ) </s>;

@@ -1,0 +1,8 @@
+# Known contact names for the name-dialer example grammar.
+# Save as: data/grammars/en-US/known-names.txt
+home
+work
+mom and dad
+grandma and grandpa
+the office
+the school
