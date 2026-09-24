@@ -336,16 +336,16 @@ The built-in domain models from [6.1](#61-built-in-domain-models) — like the a
 The TNL SDK installs with a default general-domain STT model already in `model/`, but the automotive model isn't one of them — download it first from the SDK's model downloads page, https://doc.sensory.com/tnl/7.9/models/downloads/, and save it into `model/` alongside the models that shipped with the install (see [Measuring Word Error Rate §2.2](measuring-stt-wer.md#22-stt-model) for the same download step in more detail, including where to get it for other SDK versions). Then assemble the Voice Genie wake word and the automotive STT model into a pipeline with `tpl-opt-spot-vad-lvcsr` (wake word → VAD → STT), the same way [4.3](#43-wake-word--voice-command) assembled a wake word into a command set:
 
 ```bash
-bin/snsr-edit -o model/opt-vg-vad-stt-enUS-automotive-medium-2.3.5-nlu-pnc.snsr \
-    -t model/tpl-opt-spot-vad-lvcsr-1.29.0.snsr \
+bin/snsr-edit -t model/tpl-opt-spot-vad-lvcsr-1.29.0.snsr \
     -f phrasespot model/spot-voicegenie-enUS-6.6.0-m.snsr \
-    -f lvcsr model/stt-enUS-automotive-medium-2.3.5-nlu-pnc.snsr
+    -f lvcsr model/stt-enUS-automotive-medium-2.3.5-nlu-pnc.snsr \
+    -o model/opt-vg-vad-stt-enUS-automotive-medium-2.3.5-nlu-pnc.snsr
 ```
 
 ```bash
 bin/snsr-eval -v -t model/opt-vg-vad-stt-enUS-automotive-medium-2.3.5-nlu-pnc.snsr \
     -s partial-result-interval=0 \
-	data/audio/voice-genie-set-cruise-control.wav
+    data/audio/voice-genie-set-cruise-control.wav
 ```
 
 ```
