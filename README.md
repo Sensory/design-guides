@@ -36,6 +36,16 @@ How to create and use enrolled models with Sensory THF/TNL — training custom u
 
 ---
 
+### [Benchmarking Enrolled Wake Word Models (FRR, IAR, FAR)](benchmarking-enrolled-models.md)
+
+How to measure the accuracy of enrolled wake word models: false reject rate (FRR), imposter accept rate (IAR), and false accepts per day (FAR). Covers how many speakers, recordings, and hours of noise you need, real vs. synthetic speakers, adding noise at fixed SNRs, and a Python script that enrolls every speaker with `spot-enroll` and scores each model against everyone's test audio and the noise with `snsr-eval`, at the model's own `sv-threshold` or an override. Also covers why simulation replaces live testing and how to read a zero-error result.
+
+**Applies to:** TrulyHandsfree (THF), TrulyNatural (TNL) SDKs — THF / TNL 7.8.0+ (examples on TNL 7.9.0)
+**Platform:** PC/workstation (Windows, Linux, or macOS) — simulation, not an on-device measurement
+**Models used:** Enrolled models built from `udt-*.snsr` / `eft-*.snsr` enroller models (examples use `udt-universal-3.67.1.0.snsr`)
+
+---
+
 ### [How to Save Debug Audio and Data in THF/TNL](debug-audio-capture.md)
 
 How to capture the exact audio and event data a THF/TNL model saw on a customer's device using the `tpl-spot-debug` template — primarily by wrapping a live session at runtime in an Android/iOS app (following the SDK's `snsr-debug` sample), with a command-line model-swap alternative for PC bench testing — then extract and replay it in simulation with `snsr-log-split`, `snsr-eval`, and `audio-check`. Covers slot-addressing changes introduced by the debug wrapper, on-device storage location trade-offs, a lightweight in-memory alternative for storage-constrained devices, and the security/privacy handling required since this tool intentionally breaks Sensory's all-edge, nothing-saved design philosophy.

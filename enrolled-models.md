@@ -495,6 +495,8 @@ When validating an enrolled model, measure all three of the following, not just 
 - **False accept rate (FAR)** — how often a phrase is recognized when it should have been rejected.
 - **Imposter accept rate (IAR)** — how often a *different* speaker is incorrectly accepted as the enrolled speaker. This is the metric that matters most for biometric deployments and should drive your `sv-threshold` (THF/TNL) or `SvThreshold` (THF-Micro) setting — see [5.4](#54-biometric-scoring-thftnl-vs-thf-micro).
 
+See [Benchmarking Enrolled Wake Word Models](benchmarking-enrolled-models.md) for how to collect test data and measure all three.
+
 ### 7.6 Common Pitfalls
 
 - Using enrolled-fixed enrollment for a security-sensitive biometric use case, where the known target phrase gives an attacker a fixed target.
