@@ -3,7 +3,7 @@
 **Product:** TrulyHandsfree (THF) and TrulyNatural (TNL) SDKs  
 **Models:** Enrolled models produced by the enroller task models (`udt-*.snsr`, `eft-*.snsr`)  
 **Version:** THF / TNL 7.8.0+ (examples run on TNL 7.9.0)  
-**Document Version:** 1.1.0  
+**Document Version:** 1.2.0  
 **Last Modified:** 2026-10-26  
 **Audience:** Field Application Engineers, Customer Integration Engineers, external developers and integration partners  
 **Status:** Released
@@ -169,14 +169,22 @@ my-corpus/
 
 ## 5. Step 3 — Add Noise Conditions
 
-To test in noise, mix noise into each clean test recording at fixed signal-to-noise ratios. Sensory typically uses **30, 20, 10, and 5 dB SNR**, but use whatever range matches your product. The script's `noisify` subcommand reads every `test/clean/*.wav` file, mixes in a random segment of a noise file at each SNR, and writes the results to `test/snr30/`, `test/snr20/`, and so on:
+To test in noise, mix noise into each clean test recording at fixed signal-to-noise ratios. Sensory typically uses **30, 20, 10, and 5 dBA SNR**, but use whatever range matches your product. The script's `noisify` subcommand reads every `test/clean/*.wav` file, mixes in a random segment of a noise file at each SNR, and writes the results to `test/snr30/`, `test/snr20/`, and so on:
 
 ```bash
 python enrolled_benchmark.py noisify --corpus my-corpus --noise babble.wav --snr 30,20,10,5
 ```
 
+**How SNR is measured.** SNR should compare the level of the *speech* with the level of the noise. A test recording also contains silence before and after the phrase, and that silence has to stay in the file: enrollment and recognition both use the audio around the phrase, so trimming it would change the results. If the speech level were averaged over the whole file, the silence would pull it down, and a recording mixed at "5 dB" would really have a much higher SNR on the speech. `noisify` avoids this without any trimming:
+
+- **Speech level** is measured over the loud parts of the recording only. The recording is split into 20 ms frames, and only frames within 30 dB of the loudest frame are averaged. This approximates the *active speech level* of ITU-T P.56.
+- **Noise level** is measured over the whole noise segment that's mixed in, since the noise is present the whole time.
+- **Both levels are A-weighted**, so the SNR is in **dBA** (decibels with A-weighting). A-weighting reduces the contribution of very low frequencies, so the measured SNR is closer to how loud the noise sounds to a listener. Without it, noise with strong low-frequency content, such as car noise, measures as much louder than it sounds. The weighting is used only to measure the levels: the noise is mixed into the recording unweighted, and the recording keeps its natural silence.
+
+Other details:
+
 - The noise file must be 16-bit mono PCM at the same sample rate as the corpus, and longer than any test recording.
-- SNR is computed from the average power of the whole test recording, including any leading and trailing silence. Trim long silences from the test recordings first if you want SNR to reflect the speech alone.
+- The 30 dB frame range assumes the clean recordings really are quiet. If a "clean" recording's background noise is within 30 dB of its speech, some background frames are counted as speech, which lowers the measured speech level, so the real SNR on the speech comes out somewhat higher than requested.
 - The random noise segment is seeded, so re-running `noisify` reproduces the same noisy corpus.
 - Use a different noise recording here from the FAR noise in `noise/`, so the two tests stay independent.
 
@@ -264,19 +272,85 @@ def power(samples) -> float:
 
 # ---------------------------------------------------------------- noisify
 
+# A-weighting pole frequencies in Hz (IEC 61672). The analog response is
+#   s^4 / ((s + w1)^2 (s + w2) (s + w3) (s + w4)^2),  wN = 2 * pi * fN
+A_WEIGHT_POLES = (20.598997, 107.65265, 737.86223, 12194.217)
+
+
+def a_weight(samples, rate: int):
+    """A-weight a signal, as a cascade of six first-order filters.
+
+    The four high-pass sections use the bilinear transform. The two 12.2 kHz
+    low-pass poles lie above the Nyquist frequency at 16 kHz, where the bilinear
+    transform badly warps them, so they map directly to z-plane poles instead.
+    At 16 kHz this is within 0.7 dB of IEC 61672 up to 4 kHz and 2.5 dB up to 7.5 kHz.
+
+    Only used to measure levels: noisify compares the A-weighted power of speech
+    and noise, so the filter's overall gain cancels out and isn't normalized.
+    """
+    f1, f2, f3, f4 = A_WEIGHT_POLES
+    k = 2 * rate
+    sections = []                              # (b0, b1, a1) for each section
+    for f in (f1, f1, f2, f3):                 # high-pass: s / (s + w)
+        w = 2 * math.pi * f
+        b0 = k / (k + w)
+        sections.append((b0, -b0, (w - k) / (k + w)))
+    p = math.exp(-2 * math.pi * f4 / rate)     # low-pass: w / (s + w), twice
+    sections += [(1 - p, 0.0, -p)] * 2
+
+    out = [float(s) for s in samples]
+    for b0, b1, a1 in sections:
+        x1 = y1 = 0.0
+        for i, x in enumerate(out):
+            y1 = b0 * x + b1 * x1 - a1 * y1
+            x1 = x
+            out[i] = y1
+    return out
+
+
+def speech_power(weighted, rate: int, frame_ms: int = 20, range_db: float = 30.0) -> float:
+    """Average power over the loud frames only, so leading/trailing silence doesn't count.
+
+    Splits the signal into frames and keeps those within range_db of the loudest
+    frame, which approximates the active speech level (ITU-T P.56).
+    """
+    n = rate * frame_ms // 1000
+    frames = [power(weighted[i:i + n]) for i in range(0, len(weighted) - n + 1, n)]
+    if not frames or max(frames) == 0:
+        return 0.0
+    floor = max(frames) * 10 ** (-range_db / 10)
+    loud = [p for p in frames if p >= floor]
+    return sum(loud) / len(loud)
+
+
 def noisify(args) -> None:
     corpus = Path(args.corpus)
-    _, noise = read_pcm(Path(args.noise))
-    noise_power = power(noise)
+    noise_params, noise = read_pcm(Path(args.noise))
     rng = random.Random(0)  # fixed seed: the noisy corpus is reproducible
     snrs = [int(s) for s in args.snr.split(",")]
 
-    for clean in sorted(corpus.glob("speakers/*/test/clean/*.wav")):
+    cleans = sorted(corpus.glob("speakers/*/test/clean/*.wav"))
+    for k, clean in enumerate(cleans, 1):
         params, speech = read_pcm(clean)
-        start = rng.randrange(0, max(len(noise) - len(speech), 1))
+        rate = params.framerate
+        if noise_params.framerate != rate:
+            sys.exit(f"{args.noise}: {noise_params.framerate} Hz, but {clean} is {rate} Hz")
+        if len(noise) < len(speech):
+            sys.exit(f"{args.noise} is shorter than {clean}")
+        start = rng.randrange(0, len(noise) - len(speech) + 1)
         segment = noise[start:start + len(speech)]
+
+        # SNR in dBA: A-weighted speech level over the loud frames only, against
+        # the A-weighted level of the noise segment actually mixed in. The audio
+        # itself is mixed unweighted, with its natural silence left in place.
+        p_speech = speech_power(a_weight(speech, rate), rate)
+        p_noise = power(a_weight(segment, rate))
+        if p_speech == 0 or p_noise == 0:
+            print(f"warning: {clean} or its noise segment is silent, skipping", file=sys.stderr)
+            continue
+
         for snr in snrs:
-            gain = math.sqrt(power(speech) / (noise_power * 10 ** (snr / 10)))
+            gain = math.sqrt(p_speech / (p_noise * 10 ** (snr / 10)))
             mixed = array.array("h", (
                 max(-32768, min(32767, int(s + gain * n)))
                 for s, n in zip(speech, segment)))
@@ -285,7 +359,8 @@ def noisify(args) -> None:
             with wave.open(str(out), "wb") as w:
                 w.setparams(params)
                 w.writeframes(mixed.tobytes())
-    print(f"wrote {', '.join(f'snr{s}' for s in snrs)} test conditions")
+        print(f"\rnoisified {k}/{len(cleans)} recordings", end="", flush=True)
+    print(f"\nwrote {', '.join(f'snr{s}' for s in snrs)} test conditions (SNR in dBA)")
 
 
 # ---------------------------------------------------------------- run
@@ -510,7 +585,7 @@ def main() -> None:
     p = sub.add_parser("noisify", help="mix noise into test/clean at fixed SNRs")
     p.add_argument("--corpus", required=True)
     p.add_argument("--noise", required=True, help="16-bit mono noise WAV, same rate as corpus")
-    p.add_argument("--snr", default="30,20,10,5", help="comma-separated SNRs in dB")
+    p.add_argument("--snr", default="30,20,10,5", help="comma-separated SNRs in dBA")
     p.set_defaults(func=noisify)
 
     p = sub.add_parser("run", help="enroll and score every speaker")
@@ -740,7 +815,7 @@ snsr-eval -t spk1.snsr -v test-1.wav
 # Query a model's default sv-threshold (always pass an audio file)
 snsr-eval -t spk1.snsr -q sv-threshold test-1.wav
 
-# Add noise to every test/clean recording at 30/20/10/5 dB SNR
+# Add noise to every test/clean recording at 30/20/10/5 dBA SNR
 python enrolled_benchmark.py noisify --corpus my-corpus --noise babble.wav --snr 30,20,10,5
 
 # Enroll every speaker and score at each model's own sv-threshold
