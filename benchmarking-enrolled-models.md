@@ -106,6 +106,13 @@ Small tests are the most common benchmarking mistake. Testing with a handful of 
 
 Because every speaker serves as an imposter for every other speaker, the number of imposter trials grows with the square of the speaker count: 50 speakers × 15 test recordings each gives 750 target trials but 36,750 imposter trials. More speakers is what improves IAR confidence the most.
 
+**Who the speakers are matters as much as how many.** Choose speakers who match the people the product is for:
+
+- **Accents and language.** Accent has a large effect on accuracy. For a US English product, use native speakers of US English in the mix of regional accents the product will meet. If the product must work for several accent groups, include enough speakers from each to report them separately.
+- **Gender and age.** Balance them to match the target users, which for most products means about half women and half men, across the adult age range.
+
+**One speaker is one speaker.** Don't create extra "speakers" by enrolling the same person several times from different subsets of their recordings. Those enrollments share one voice, so their results aren't independent, and counting them separately makes the benchmark look larger and more certain than it is. If you do enroll someone more than once, for example to see how much enrollment varies, average their results and count them as one speaker.
+
 ### 3.2 Enrollment Recordings
 
 Each speaker enrolls by saying the target phrase **4 times in a quiet environment** — a home or office with no one talking in the background and no fans or other noise running. These recordings train that speaker's enrolled model, exactly as an end user would on the device. Follow the recording guidelines in [Creating and Using Enrolled Models §4.2](enrolled-models.md#42-recording-guidelines), including recording some takes with trailing context speech if your product's enrollment flow does so.
@@ -117,6 +124,7 @@ Each speaker also records **10–20 test recordings** of the same target phrase,
 To make the test recordings representative of how the product will actually be used:
 
 - Record them on a different day or in a different session from enrollment if possible, so they capture natural variation in the speaker's voice.
+- Record every speaker on the same device and microphone. Each speaker's test recordings also serve as imposter recordings for everyone else, and recordings from a different device are easier to tell apart from the enrolled speaker, which makes IAR look better than it is.
 - Vary the speaker's distance and direction from the microphone the way real use will — for example, a laptop user may be at arm's length or across a desk. Sensory doesn't prescribe fixed distances or angles; match your product's use case, and record each distinct setup as its own condition (see [Step 2](#4-step-2--lay-out-the-corpus)) so you can compare them.
 
 **Capture natural speech, not performed speech.** The test is only as realistic as the way people say the phrase. When someone uses a product, they're focused on what they want it to do, and they say the phrase naturally, as if talking to a person. Recording sessions easily produce something else:
@@ -999,6 +1007,10 @@ There is no single right `sv-threshold`; it depends on what matters more for the
 - **Voice biometrics / security** — prioritize low IAR, and accept a higher FRR.
 - **Personalized wake word** ("respond to me, not the TV or my family") — prioritize low FRR and FAR, and accept a higher IAR.
 
+For security, also decide what an imposter is assumed to know. The benchmark measures the worst case: every imposter says the correct phrase. With a user-defined phrase, a stranger usually doesn't know it, so even a fairly high IAR still gives real protection against, say, a thief. Rejecting someone who knows the phrase needs a much lower IAR, and rejecting family members who know it — whose voices are often similar — needs a lower one still. With an enrolled-fixed phrase, everyone knows the phrase, which is one reason it isn't recommended for security ([Creating and Using Enrolled Models §3.2](enrolled-models.md#32-enrolled-fixed-enrollment)).
+
+**FAR grows with the number of enrolled users.** Each speaker's model in the benchmark holds one user. False accepts happen roughly independently for each enrollment, so a model that listens for two enrolled users has about twice the FAR of a single-user model, three users about three times, and so on. If your product enrolls several users in one model, multiply the benchmark's FA/day accordingly when you compare it with a target.
+
 Start with the `sv-threshold` stored in the enrolled model — the script uses it unless you pass `--sv-threshold`. If the results miss your targets, re-run the same corpus with `--sv-threshold` set higher (to lower IAR and FAR) or lower (to lower FRR), and compare. Change the value in small steps and keep each run's `summary.csv`. To see what threshold your enrolled model starts with, query it — always pass an audio file, since `snsr-eval` with no file listens to the live microphone and won't exit on its own:
 
 ```bash
@@ -1065,6 +1077,8 @@ It's tempting to drop the few speakers with the worst results — someone with a
 - **Real users don't always re-enroll.** Many people who have a bad experience decide the feature doesn't work and stop using it. Those users are part of what the product will deliver, so they belong in the results.
 - **Any cutoff is arbitrary.** Excluding the worst 5% instead of 10%, or every speaker above 30% FRR instead of 40%, changes the result, and the choice then has to be justified and reported alongside it. Results with different cutoffs can't be compared.
 - **The enrollment checks are the filter.** Enrollment already rejects recordings that are too noisy, clipped, or inconsistent ([Creating and Using Enrolled Models §4.1](enrolled-models.md#41-the-two-step-enrollment-process)). Every speaker who gets through enrollment is a speaker the product would accept, so report all of them, including those with a high FRR or FAR.
+
+This matters most for FAR. False accepts aren't spread evenly across enrollments: most models have very few, and a small number — often those with weaker enrollment recordings — have many. That's why FAR is reported as the mean over all models: it includes the few worst enrollments, which are the ones users notice, and leaving them out would hide exactly the problem FAR is meant to measure.
 
 If a few speakers dominate the errors, that's a finding worth reporting in its own right — look at their enrollment recordings to see what went wrong, and consider whether the product should guide users to re-enroll. The confidence intervals ([8.3](#83-confidence-intervals)) already reflect how much these speakers swing the result.
 
