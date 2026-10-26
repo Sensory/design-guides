@@ -1099,10 +1099,10 @@ For reference, this is a benchmark of one enrolled wake word phrase on Sensory-g
 | Test condition (SNR) | FRR | IAR |
 |---|---|---|
 | Clean | 9.83% | 3.07% |
-| 30 dB | 5.98% | 4.78% |
-| 20 dB | 5.98% | 5.16% |
-| 10 dB | 7.84% | 3.33% |
-| 5 dB | 13.94% | 1.88% |
+| 30 dBA | 5.98% | 4.78% |
+| 20 dBA | 5.98% | 5.16% |
+| 10 dBA | 7.84% | 3.33% |
+| 5 dBA | 13.94% | 1.88% |
 
 FAR was **0 false accepts over 110 model-hours** (55 models × a 2-hour conversational noise file) — under about 0.65 FA/day by the rule of three ([8.3](#when-you-see-zero-errors)). Two hours is well below the 15-hour minimum in [3.4](#34-non-target-audio-for-far), so this FAR is only a rough indication.
 
