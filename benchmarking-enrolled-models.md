@@ -37,7 +37,7 @@
 8. [Step 5 — Interpreting Results](#8-step-5--interpreting-results)
    - [8.1 Choosing an sv-threshold](#81-choosing-an-sv-threshold)
    - [8.2 Recognition Sensitivity vs. Verification](#82-recognition-sensitivity-vs-verification)
-   - [8.3 Confidence When You See Zero Errors](#83-confidence-when-you-see-zero-errors)
+   - [8.3 Confidence Intervals](#83-confidence-intervals)
    - [8.4 Example: Synthetic 55-Speaker Results](#84-example-synthetic-55-speaker-results)
 9. [Common Pitfalls](#9-common-pitfalls)
 10. [Quick Reference — Command Summary](#10-quick-reference--command-summary)
@@ -120,7 +120,7 @@ To make the test recordings representative of how the product will actually be u
 
 ### 3.4 Non-Target Audio for FAR
 
-FAR audio is the easiest data to collect, since it doesn't need volunteers: any long recording of realistic sound that doesn't contain the target phrase works — conversations, TV and radio, music, room and household noise. The challenge is quantity. False accepts are rare events, so you need many hours of audio to see enough of them (or to be confident there are few — see [8.3](#83-confidence-when-you-see-zero-errors)):
+FAR audio is the easiest data to collect, since it doesn't need volunteers: any long recording of realistic sound that doesn't contain the target phrase works — conversations, TV and radio, music, room and household noise. The challenge is quantity. False accepts are rare events, so you need many hours of audio to see enough of them (or to be confident there are few — see [8.3](#when-you-see-zero-errors)):
 
 - **15 hours** is the absolute minimum, and only for quick, informal tests where statistical significance isn't needed.
 - **150 hours** is what you need for statistically accurate results. It's also the amount Sensory evaluates each enrolled model on before delivering a model.
@@ -530,56 +530,116 @@ def run(args) -> None:
     with progress, ThreadPoolExecutor(max_workers=args.jobs) as pool:
         results = list(pool.map(score, speakers))
 
-    # tally[condition] = [target, fr, imposter, ia]
-    tally = {c: [0, 0, 0, 0] for c in conditions}
-    false_accepts = 0
+    # Per-speaker counts, so results can be recomputed for any resample of speakers.
+    n = len(speakers)
+    idx = {spk.name: k for k, spk in enumerate(speakers)}
+    n_files = {c: [0] * n for c in conditions}        # test recordings per speaker
+    for owner, cond, _ in tests:
+        n_files[cond][idx[owner]] += 1
+    false_rejects = {c: [0] * n for c in conditions}  # [model]
+    imposter_accepts = {c: [[0] * n for _ in range(n)] for c in conditions}  # [model][owner]
+    false_accepts = [0] * n                           # [model]
     model_thresholds = set()
 
     for name, threshold, counts in results:
+        k = idx[name]
         if threshold is not None:
             model_thresholds.add(threshold)
         for owner, cond, f in tests:
             hit = counts.get(str(f), 0) > 0
-            row = tally[cond]
             if owner == name:
-                row[0] += 1
-                row[1] += not hit
+                false_rejects[cond][k] += not hit
             else:
-                row[2] += 1
-                row[3] += hit
-        false_accepts += sum(counts.get(str(f), 0) for f in noise)
+                imposter_accepts[cond][k][idx[owner]] += hit
+        false_accepts[k] = sum(counts.get(str(f), 0) for f in noise)
+
+    def rates(weights):
+        """FRR and IAR (%) per condition, and FA/day, with speaker k counted weights[k] times."""
+        drawn = [(k, w) for k, w in enumerate(weights) if w]
+        frr, iar = {}, {}
+        for c in conditions:
+            files = n_files[c]
+            target = sum(w * files[k] for k, w in drawn)
+            fr = sum(w * false_rejects[c][k] for k, w in drawn)
+            # Every drawn model against every other drawn speaker's recordings.
+            all_files = sum(w * files[k] for k, w in drawn)
+            imposter = sum(w * (all_files - w * files[k]) for k, w in drawn)
+            ia = sum(w * sum(w2 * imposter_accepts[c][k][l] for l, w2 in drawn)
+                     for k, w in drawn)
+            frr[c] = 100 * fr / target if target else math.nan
+            iar[c] = 100 * ia / imposter if imposter else math.nan
+        hours = noise_hours * sum(weights)
+        fa_day = 24 * sum(w * false_accepts[k] for k, w in drawn) / hours if hours else math.nan
+        return frr, iar, fa_day
+
+    # Bootstrap 95% confidence intervals: resample whole speakers with replacement,
+    # since one speaker's recordings (and their model's results) aren't independent.
+    # Seeded, so the same results always give the same intervals.
+    rng = random.Random(0)
+    samples = []
+    for _ in range(args.bootstrap):
+        weights = [0] * n
+        for _ in range(n):
+            weights[rng.randrange(n)] += 1
+        samples.append(rates(weights))
+
+    def interval(values):
+        values = sorted(v for v in values if not math.isnan(v))
+        if not values:
+            return math.nan, math.nan
+        return (values[int(0.025 * (len(values) - 1))],
+                values[int(math.ceil(0.975 * (len(values) - 1)))])
 
     if args.sv_threshold is None:
         threshold = "/".join(sorted(model_thresholds)) + " (model default)"
     else:
         threshold = f"{args.sv_threshold} (override)"
-    model_hours = noise_hours * len(speakers)
-    fa_day = 24 * false_accepts / model_hours if model_hours else float("nan")
+    model_hours = noise_hours * n
+    frr, iar, fa_day = rates([1] * n)
+    fa_ci = interval([s[2] for s in samples])
+    show_ci = args.bootstrap > 0
+
+    def ci_txt(ci, fmt):
+        return f" [{ci[0]:{fmt}}-{ci[1]:{fmt}}]" if show_ci else ""
+
+    def ci_cols(ci, fmt):
+        return [f"{ci[0]:{fmt}}", f"{ci[1]:{fmt}}"] if show_ci else ["", ""]
 
     with open(out / "summary.csv", "w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
         writer.writerow(["sv_threshold", "condition", "target_trials", "false_rejects",
-                         "FRR_pct", "imposter_trials", "imposter_accepts", "IAR_pct",
-                         "false_accepts", "model_hours", "FA_per_day"])
+                         "FRR_pct", "FRR_ci_low", "FRR_ci_high",
+                         "imposter_trials", "imposter_accepts",
+                         "IAR_pct", "IAR_ci_low", "IAR_ci_high",
+                         "false_accepts", "model_hours", "FA_per_day",
+                         "FA_ci_low", "FA_ci_high"])
         if args.skip_noise:
             noise_txt = "noise skipped"
         else:
             noise_txt = f"{noise_hours:.2f} h noise ({model_hours:.2f} model-hours)"
-        print(f"\n{len(speakers)} speakers, {noise_txt}, sv-threshold {threshold}\n")
-        print(f"{'condition':<10} {'FRR':>16} {'IAR':>16} {'FA/day':>8}")
+        print(f"\n{n} speakers, {noise_txt}, sv-threshold {threshold}")
+        if show_ci:
+            print(f"95% confidence intervals from {args.bootstrap} bootstrap resamples of speakers")
+        print()
+        width, fa_width = (34, 22) if show_ci else (16, 8)
+        print(f"{'condition':<10} {'FRR':>{width}} {'IAR':>{width}} {'FA/day':>{fa_width}}")
         for c in conditions:
-            n_t, fr, n_i, ia = tally[c]
-            frr = 100 * fr / n_t if n_t else float("nan")
-            iar = 100 * ia / n_i if n_i else float("nan")
+            n_t = sum(n_files[c])
+            fr = sum(false_rejects[c])
+            n_i = sum(n_files[c]) * (n - 1)
+            ia = sum(map(sum, imposter_accepts[c]))
+            frr_ci = interval([s[0][c] for s in samples])
+            iar_ci = interval([s[1][c] for s in samples])
             if args.skip_noise:
-                fa_cols, fa_txt = ["", "", ""], f"{'skipped':>8}"
+                fa_cols, fa_txt = [""] * 5, f"{'skipped':>8}"
             else:
-                fa_cols = [false_accepts, f"{model_hours:.2f}", f"{fa_day:.3f}"]
-                fa_txt = f"{fa_day:8.3f}"
-            writer.writerow([threshold, c, n_t, fr, f"{frr:.2f}", n_i, ia, f"{iar:.2f}",
-                             *fa_cols])
-            print(f"{c:<10} {frr:6.2f}% ({fr:>3}/{n_t:<4}) "
-                  f"{iar:6.2f}% ({ia:>3}/{n_i:<4}) {fa_txt}")
+                fa_cols = [sum(false_accepts), f"{model_hours:.2f}", f"{fa_day:.3f}",
+                           *ci_cols(fa_ci, ".3f")]
+                fa_txt = f"{fa_day:8.3f}" + ci_txt(fa_ci, ".3f")
+            writer.writerow([threshold, c, n_t, fr, f"{frr[c]:.2f}", *ci_cols(frr_ci, ".2f"),
+                             n_i, ia, f"{iar[c]:.2f}", *ci_cols(iar_ci, ".2f"), *fa_cols])
+            print(f"{c:<10} {frr[c]:6.2f}% ({fr:>3}/{n_t:<4}){ci_txt(frr_ci, '6.2f')} "
+                  f"{iar[c]:6.2f}% ({ia:>3}/{n_i:<4}){ci_txt(iar_ci, '6.2f')} {fa_txt}")
     print(f"\nwrote {out / 'summary.csv'}")
 
 
@@ -605,6 +665,8 @@ def main() -> None:
                    help="comma-separated test conditions to score, e.g. clean,snr40 (default: all)")
     p.add_argument("--skip-noise", action="store_true",
                    help="don't score the FAR noise (FA columns left blank)")
+    p.add_argument("--bootstrap", type=int, default=1000,
+                   help="bootstrap resamples for 95%% confidence intervals (default 1000, 0 = off)")
     p.add_argument("-j", "--jobs", type=int, default=1,
                    help="number of speakers to enroll and score at once (default 1)")
     p.set_defaults(func=run)
@@ -635,6 +697,7 @@ python enrolled_benchmark.py run \
 | `--sv-threshold` | Optional. Overrides the `sv-threshold` stored in each enrolled model. Leave it off to benchmark the model as it ships |
 | `--conditions` | Optional. Comma-separated test conditions to score, such as `clean,snr20`. Leave it off to score every condition folder |
 | `--skip-noise` | Optional. Don't score the FAR noise. The FA columns are reported as `skipped` in the table and left blank in `summary.csv` |
+| `--bootstrap` | Number of bootstrap resamples used for the 95% confidence intervals (default `1000`). `0` turns the intervals off — see [8.3](#83-confidence-intervals) |
 | `-j`, `--jobs` | Number of speakers to enroll and score at once (default `1`). Set it to about the number of CPU cores — see below |
 
 Enrolled models are saved to `<out>/models/<speaker>.snsr` and reused if they already exist, so you can re-run with `--sv-threshold` without re-enrolling. Delete `<out>/models/` to re-enroll — for example, after changing the enroller model or the enrollment recordings.
@@ -664,12 +727,13 @@ enrolling spk6
 scoring 100.0%  2/2 models  elapsed 00:27  remaining 00:00
 
 2 speakers, 0.01 h noise (0.01 model-hours), sv-threshold 0.49 (model default)
+95% confidence intervals from 1000 bootstrap resamples of speakers
 
-condition               FRR              IAR   FA/day
-clean        0.00% (  0/4   )   0.00% (  0/4   )    0.000
-snr20       25.00% (  1/4   )   0.00% (  0/4   )    0.000
-snr10       25.00% (  1/4   )   0.00% (  0/4   )    0.000
-snr5        25.00% (  1/4   )   0.00% (  0/4   )    0.000
+condition                                 FRR                                IAR                 FA/day
+clean        0.00% (  0/4   ) [  0.00-  0.00]   0.00% (  0/4   ) [  0.00-  0.00]    0.000 [0.000-0.000]
+snr20       25.00% (  1/4   ) [  0.00- 50.00]   0.00% (  0/4   ) [  0.00-  0.00]    0.000 [0.000-0.000]
+snr10       25.00% (  1/4   ) [  0.00- 50.00]   0.00% (  0/4   ) [  0.00-  0.00]    0.000 [0.000-0.000]
+snr5        25.00% (  1/4   ) [  0.00- 50.00]   0.00% (  0/4   ) [  0.00-  0.00]    0.000 [0.000-0.000]
 ```
 
 (This is the actual output of the [Complete Walkthrough](#7-complete-walkthrough-windows-tnl-sdk-790) — a deliberately tiny two-speaker corpus built from the SDK's sample audio, so the percentages move in steps of 25% and aren't meaningful in themselves. Your elapsed time will differ.)
@@ -678,8 +742,11 @@ snr5        25.00% (  1/4   )   0.00% (  0/4   )    0.000
 - **FRR** — false rejects ÷ target trials, for that condition.
 - **IAR** — imposter accepts ÷ imposter trials, for that condition.
 - **FA/day** — false accepts in the noise audio ÷ model-hours × 24. FAR doesn't depend on the test condition, so it repeats on every row.
+- **[low-high]** — the 95% confidence interval for each figure, from bootstrapping ([8.3](#83-confidence-intervals)). The true rate for this population of speakers is likely to be inside it. Leave the intervals off with `--bootstrap 0`.
 
-The raw counts are shown in parentheses — always look at them alongside the percentage, since `0.00% (0/4)` and `0.00% (0/4000)` mean very different things.
+The raw counts are shown in parentheses — always look at them alongside the percentage, since `0.00% (0/4)` and `0.00% (0/4000)` mean very different things. Here the snr20 interval of 0–50% shows how little two speakers can tell you.
+
+`summary.csv` has the same figures, with each interval in a pair of `_ci_low` and `_ci_high` columns.
 
 Even this toy run shows the expected pattern: noise raises FRR. Re-running the same corpus with `--sv-threshold 0.9` raises the clean FRR from 0% to 50% (2/4).
 
@@ -756,9 +823,25 @@ If FRR is too high even at a low `sv-threshold`, the recognition step is rejecti
 
 Recognition is speaker-biased on its own — the model was trained on one speaker's voice — so some imposters are rejected before verification runs, even at `sv-threshold=0`. Don't read IAR at threshold `0` as "IAR without biometrics."
 
-### 8.3 Confidence When You See Zero Errors
+### 8.3 Confidence Intervals
 
-A result of zero errors doesn't mean the true rate is zero — only that it's too small to observe with that much data. A useful rule of thumb (the "rule of three") gives the 95% upper bound when you see **zero** errors in N trials (or N model-days of noise): about **3 / N**.
+Every FRR, IAR, and FAR figure is an estimate from a sample of speakers, and a different set of speakers would give somewhat different numbers. The script shows how much they could vary with a 95% confidence interval for each figure, computed by **bootstrapping**:
+
+1. Draw a new set of speakers, the same size as the original, at random **with replacement** — some speakers are drawn more than once, others not at all.
+2. Recompute FRR, IAR, and FAR from just those speakers' results.
+3. Repeat 1,000 times (`--bootstrap`), and report the range that holds the middle 95% of the recomputed values.
+
+The script resamples whole **speakers**, not individual recordings, because one speaker's recordings and their model's results aren't independent of each other: a speaker who enrolled badly tends to have many false rejects at once. Resampling recordings would ignore that and give intervals that are too narrow. The resampling is seeded, so the same results always produce the same intervals, and it only takes a few seconds even for 100 speakers.
+
+Read the intervals alongside the figures:
+
+- **Wide intervals mean too few speakers.** If two products' or settings' intervals overlap heavily, the benchmark can't tell them apart; add speakers before drawing a conclusion.
+- **FAR intervals are usually the widest.** A handful of enrollments tend to cause most of the false accepts, so whether they're drawn swings the result a lot.
+- **Like the rule of three below, the intervals assume every model hears independent noise.** All models hear the same noise, so the FAR interval is optimistic.
+
+#### When You See Zero Errors
+
+A bootstrap interval can't help when there are no errors at all: every resample also has zero errors, so the interval is `[0.00-0.00]`, as in the walkthrough output. A result of zero errors doesn't mean the true rate is zero — only that it's too small to observe with that much data. A useful rule of thumb (the "rule of three") gives the 95% upper bound when you see **zero** errors in N trials (or N model-days of noise): about **3 / N**.
 
 | Observation | 95% upper bound |
 |---|---|
@@ -788,7 +871,7 @@ For reference, this is a benchmark of one enrolled wake word phrase on Sensory-g
 | 10 dB | 7.84% | 3.33% |
 | 5 dB | 13.94% | 1.88% |
 
-FAR was **0 false accepts over 110 model-hours** (55 models × a 2-hour conversational noise file) — under about 0.65 FA/day by the rule of three ([8.3](#83-confidence-when-you-see-zero-errors)). Two hours is well below the 15-hour minimum in [3.4](#34-non-target-audio-for-far), so this FAR is only a rough indication.
+FAR was **0 false accepts over 110 model-hours** (55 models × a 2-hour conversational noise file) — under about 0.65 FA/day by the rule of three ([8.3](#when-you-see-zero-errors)). Two hours is well below the 15-hour minimum in [3.4](#34-non-target-audio-for-far), so this FAR is only a rough indication.
 
 Treat the IAR figures with caution: as described in [3.5](#35-real-vs-synthetic-speakers), a limited cloned-voice library can make synthetic speakers more alike than real ones, and real-speaker tests have shown IARs much closer to zero. This is exactly why a benchmark should include real speakers before the numbers are used for a product decision.
 
@@ -806,7 +889,8 @@ Treat the IAR figures with caution: as described in [3.5](#35-real-vs-synthetic-
 - **Benchmarking with a different enroller than the product uses.** Results only carry over to the enroller model — and the enrollment settings, such as `req-enroll` and `accuracy` — that the device actually uses.
 - **Putting `-s` before `-t` on the `snsr-eval` command line.** `snsr-eval` rejects it with `ERROR: set -t task before -f or -s options` — the task must come first.
 - **Running `snsr-eval -q` with no audio file.** With no file, `snsr-eval` listens to the live microphone and runs until you press Ctrl-C ([8.1](#81-choosing-an-sv-threshold)).
-- **Reading "0 errors" as "0% error rate."** Check the rule-of-three bound before drawing conclusions ([8.3](#83-confidence-when-you-see-zero-errors)).
+- **Reading "0 errors" as "0% error rate."** Check the rule-of-three bound before drawing conclusions ([8.3](#when-you-see-zero-errors)).
+- **Comparing results without their confidence intervals.** A difference between two runs means little if their intervals overlap heavily ([8.3](#83-confidence-intervals)).
 
 ---
 
