@@ -26,6 +26,7 @@
    - [3.4 Non-Target Audio for FAR](#34-non-target-audio-for-far)
    - [3.5 Real vs. Synthetic Speakers](#35-real-vs-synthetic-speakers)
    - [3.6 If You Must Record Over the Air](#36-if-you-must-record-over-the-air)
+   - [3.7 Audio Requirements](#37-audio-requirements)
 4. [Step 2 — Lay Out the Corpus](#4-step-2--lay-out-the-corpus)
 5. [Step 3 — Add Noise Conditions](#5-step-3--add-noise-conditions)
 6. [Step 4 — Enroll and Score Every Speaker](#6-step-4--enroll-and-score-every-speaker)
@@ -154,6 +155,23 @@ Contact your Sensory FAE about synthetic data for your phrase.
 
 If the test audio has to be played back over the air into the device — for example, to capture it through the device's own microphones — play back **unmodified, clean recordings** through a loudspeaker that accurately reproduces a human voice (such as an artificial mouth or a head-and-torso simulator), not a generic speaker. A small consumer speaker colors the audio and can change the results. Capture what the device hears once, then score the captured audio in simulation ([1.3](#13-simulate-dont-test-live)).
 
+### 3.7 Audio Requirements
+
+Enrollment and test recordings should be as close as possible to what the recognizer will hear on the device. Check them against this list before you benchmark; the script's `check` subcommand verifies the items marked ✓ ([Step 2](#4-step-2--lay-out-the-corpus)).
+
+| Requirement | Why |
+|---|---|
+| ✓ **16-bit PCM WAV, mono, 16 kHz** (or the model's sample rate) | The format the SDK models expect |
+| **Never upsample** audio recorded at a lower rate (such as 8 kHz) | The missing high frequencies can't be restored, and the model relies on them |
+| **No µ-law or lossy compression** (MP3, AAC, and so on), even as an intermediate step | Compression artifacts change what the model hears |
+| ✓ **At least 0.5 s of naturally recorded quiet before and after the phrase** | Enrollment and recognition use the audio around the phrase; padding must be real recorded background, not inserted silence |
+| **No editing or post-processing** — no trimming, splicing, noise reduction, automatic gain control, or level "cleanup" | Only controlled amounts of added noise ([Step 3](#5-step-3--add-noise-conditions)) should change the recordings |
+| ✓ **No runs of identical samples** (digital silence) | Never occurs on a real device, and skews results |
+| ✓ **No clipping**, at any gain stage between the microphone and the file | Clipping distorts the speech |
+| ✓ **A good recording level** — peaks using about 12–15 of the 16 bits (roughly −18 to −6 dBFS) | Too low loses detail, especially for soft talkers; too high risks clipping |
+| **A microphone with a flat response from 100 Hz to 8 kHz** — ideally the device's own microphone and audio path | A different microphone or front end changes the results |
+| **The same audio path for enrollment and recognition** — for a DSP target, the DSP's own channel | A mismatch between enrollment and test audio raises errors |
+
 ---
 
 ## 4. Step 2 — Lay Out the Corpus
@@ -182,18 +200,37 @@ my-corpus/
 - **Condition folder names** under `test/` are free-form — `clean`, `snr20`, `arms-length`, `across-room` — and each is reported separately. Folders named `snrNN` sort from least to most noisy after `clean`.
 - Every speaker should have the same set of condition folders, so each condition has the same speakers behind it.
 
-**Check the recordings before you benchmark.** A real microphone always picks up a little noise, so even the quiet parts of a real recording change slightly from one sample to the next. Long runs of exactly the same sample value — usually zeros, "digital silence" — never happen on a device. They come from synthetic or edited audio, splicing, or dropped audio buffers, and they give the recognizer a perfectly silent background it will never hear in use, which can skew results. The script's `check` subcommand scans every enrollment and test recording for runs of identical samples:
+**Check the recordings before you benchmark.** The script's `check` subcommand checks every enrollment and test recording against the audio requirements it can verify automatically ([3.7](#37-audio-requirements)):
 
 ```bash
 python enrolled_benchmark.py check --corpus my-corpus
 ```
 
 ```
-speakers/spk012/test/clean/007.wav: 2 run(s) of identical samples, longest 200 ms of value 0 at 0.10 s
-1 of 1840 recordings have runs of identical samples of 10 ms or more
+speakers/spk012/enroll/002.wav: 8000 Hz, expected 16000 Hz
+speakers/spk012/test/clean/007.wav: 1 run(s) of identical samples, longest 200 ms of value 0 at 0.10 s
+speakers/spk031/test/clean/004.wav: clipped in 492 place(s)
+speakers/spk047/enroll/001.wav: peak level only -30 dBFS
+speakers/spk047/test/clean/012.wav: 0.20 s of quiet before the phrase and 1.27 s after; at least 0.5 s needed
+checked 1840 recordings
+  sample rate:        1 recording(s)
+  identical samples:  1 recording(s)
+  clipping:           1 recording(s)
+  low level:          1 recording(s)
+  short padding:      1 recording(s)
 ```
 
-By default it reports runs of 10 ms or more; change that with `--min-run-ms`. Fix flagged recordings at the source — re-record, re-capture, or regenerate them — rather than editing the audio. Adding noise hides the runs in the noisy conditions but not in `clean`, so a corpus with digital silence can show a *higher* FRR on clean audio than with light noise added.
+| Check | Flags a recording when |
+|---|---|
+| sample rate | It isn't at the expected rate (`--rate`, default 16000 Hz) |
+| identical samples | It has a run of identical sample values at least `--min-run-ms` long (default 10 ms) |
+| clipping | It has three or more full-scale samples in a row |
+| low level | Its loudest sample is below −18 dBFS (uses fewer than 12 bits) |
+| short padding | It has less than 0.5 s of quiet before or after the phrase. Checked on enrollment and `clean` test recordings only, since in noise there's no quiet to measure |
+
+**Identical samples** need a word of explanation. A real microphone always picks up a little noise, so even the quiet parts of a real recording change slightly from one sample to the next. Long runs of exactly the same value — usually zeros, "digital silence" — never happen on a device. They come from synthetic or edited audio, splicing, or dropped audio buffers, and they give the recognizer a perfectly silent background it will never hear in use. Adding noise hides the runs in the noisy conditions but not in `clean`, so a corpus with digital silence can show a *higher* FRR on clean audio than with light noise added.
+
+Fix flagged recordings at the source — re-record, re-capture, or regenerate them — rather than editing the audio, which breaks the "no editing" requirement. `check` also flags clipping in noisy conditions; if `noisify` output clips, the noise or speech is too loud for that SNR. `check` only reports problems; it doesn't stop a benchmark from running.
 
 ---
 
@@ -213,7 +250,7 @@ python enrolled_benchmark.py noisify --corpus my-corpus --noise mix-noise --snr 
 
 **How SNR is measured.** SNR should compare the level of the *speech* with the level of the noise. A test recording also contains silence before and after the phrase, and that silence has to stay in the file: enrollment and recognition both use the audio around the phrase, so trimming it would change the results. If the speech level were averaged over the whole file, the silence would pull it down, and a recording mixed at "5 dB" would really have a much higher SNR on the speech. `noisify` avoids this without any trimming:
 
-- **Speech level** is measured over the loud parts of the recording only. The recording is split into 20 ms frames, and only frames within 30 dB of the loudest frame are averaged. This approximates the *active speech level* of ITU-T P.56.
+- **Speech level** is measured over the speech only. The recording is split into 20 ms frames, and only frames that are at least 15 dB above the recording's own background level (its quietest 10% of frames) and within 30 dB of its loudest frame are averaged. This approximates the *active speech level* of ITU-T P.56.
 - **Noise level** is measured over the whole noise segment that's mixed in, since the noise is present the whole time.
 - **Both levels are A-weighted**, so the SNR is in **dBA** (decibels with A-weighting). A-weighting reduces the contribution of very low frequencies, so the measured SNR is closer to how loud the noise sounds to a listener. Without it, noise with strong low-frequency content, such as car noise, measures as much louder than it sounds. The weighting is used only to measure the levels: the noise is mixed into the recording unweighted, and the recording keeps its natural silence.
 
@@ -221,7 +258,7 @@ Other details:
 
 - Noise files must be 16-bit mono PCM at the same sample rate as the corpus. A file shorter than a test recording isn't used for that recording; at least one file must be longer than every test recording.
 - `noisify` writes `noisify-log.csv` in the corpus folder, listing which noise file and starting point went into each test recording, so you can trace a surprising result back to its noise.
-- The 30 dB frame range assumes the clean recordings really are quiet. If a "clean" recording's background noise is within 30 dB of its speech, some background frames are counted as speech, which lowers the measured speech level, so the real SNR on the speech comes out somewhat higher than requested.
+- The speech-level rule assumes the "clean" recordings really are quiet. If a recording's own background noise is less than about 15 dB below its speech, the rule can't separate the two well, and the SNR on the speech will be somewhat off. Recordings that noisy shouldn't be used as `clean` anyway.
 - The random choices are seeded, so re-running `noisify` with the same noise folder reproduces the same noisy corpus.
 - Use different noise recordings here from the FAR noise in `noise/`, and keep the folder outside the corpus folder, so the two tests stay independent.
 
@@ -266,7 +303,7 @@ Corpus layout (one target phrase per corpus):
   <corpus>/noise/*.wav                                non-target audio (optional)
 
 Subcommands:
-  check    find artificial runs of identical samples in the recordings
+  check    check the recordings against the audio requirements
   noisify  mix noise into clean test recordings at fixed SNRs
   run      enroll every speaker, then score every model
 """
@@ -347,19 +384,28 @@ def a_weight(samples, rate: int):
     return out
 
 
-def speech_power(weighted, rate: int, frame_ms: int = 20, range_db: float = 30.0) -> float:
-    """Average power over the loud frames only, so leading/trailing silence doesn't count.
+def speech_frames(signal, rate: int, frame_ms: int = 20):
+    """Split a signal into frames and pick out the ones that hold speech.
 
-    Splits the signal into frames and keeps those within range_db of the loudest
-    frame, which approximates the active speech level (ITU-T P.56).
+    Returns (frame length in samples, frame powers, indexes of speech frames).
+    A speech frame is at least 15 dB above the recording's background level (its
+    10th-percentile frame) and within 30 dB of its loudest frame. Used for both
+    the speech level in noisify and the padding check.
     """
     n = rate * frame_ms // 1000
-    frames = [power(weighted[i:i + n]) for i in range(0, len(weighted) - n + 1, n)]
+    frames = [power(signal[i:i + n]) for i in range(0, len(signal) - n + 1, n)]
     if not frames or max(frames) == 0:
-        return 0.0
-    floor = max(frames) * 10 ** (-range_db / 10)
-    loud = [p for p in frames if p >= floor]
-    return sum(loud) / len(loud)
+        return n, frames, []
+    background = sorted(frames)[len(frames) // 10]
+    threshold = max(max(frames) * 10 ** (-30 / 10), background * 10 ** (15 / 10))
+    return n, frames, [i for i, p in enumerate(frames) if p >= threshold]
+
+
+def speech_power(weighted, rate: int) -> float:
+    """Average power over the speech frames only, so leading/trailing silence
+    doesn't count; this approximates the active speech level of ITU-T P.56."""
+    _, frames, speech = speech_frames(weighted, rate)
+    return sum(frames[i] for i in speech) / len(speech) if speech else 0.0
 
 
 def noisify(args) -> None:
@@ -426,20 +472,41 @@ def noisify(args) -> None:
 
 # ---------------------------------------------------------------- check
 
-def constant_runs(samples, rate: int, min_ms: float):
-    """Return (start seconds, length ms, value) for each run of identical samples.
+FULL_SCALE = (-32768, 32767)
 
-    A real microphone always picks up some noise, so even a quiet recording
-    changes from sample to sample. Long runs of one value (usually 0) are
-    artificial: digital silence, splicing, or a dropped audio buffer.
+
+def sample_runs(samples, rate: int, min_ms: float):
+    """Scan for runs of identical samples and for clipping, in one pass.
+
+    Returns (runs, clips): runs is (start seconds, length ms, value) for each run
+    of one value at least min_ms long; clips counts runs of 3 or more full-scale
+    samples. A real microphone always picks up some noise, so even a quiet
+    recording changes from sample to sample. Long runs of one value (usually 0)
+    are artificial: digital silence, splicing, or a dropped audio buffer.
     """
-    runs, pos = [], 0
+    runs, clips, pos = [], 0, 0
     for value, group in itertools.groupby(samples):
         n = sum(1 for _ in group)
         if n * 1000 >= min_ms * rate:
             runs.append((pos / rate, n * 1000 / rate, value))
+        if value in FULL_SCALE and n >= 3:
+            clips += 1
         pos += n
-    return runs
+    return runs, clips
+
+
+def padding(samples, rate: int):
+    """Return (leading, trailing) seconds of quiet before and after the speech.
+
+    Uses noisify's speech-frame rule, but speech must last at least three frames
+    (60 ms) in a row, so a click at the start or end doesn't count as speech.
+    """
+    n, frames, speech = speech_frames(samples, rate)
+    marks = set(speech)
+    sustained = [i for i in speech if {i, i + 1, i + 2} <= marks]
+    if not sustained:
+        return 0.0, 0.0
+    return sustained[0] * n / rate, (len(samples) - (sustained[-1] + 3) * n) / rate
 
 
 def check(args) -> None:
@@ -447,19 +514,41 @@ def check(args) -> None:
     files = sorted(corpus.glob("speakers/*/enroll/*.wav")) + \
         sorted(corpus.glob("speakers/*/test/*/*.wav"))
     tty = sys.stdout.isatty()
-    flagged = 0
+    totals = {}
     for k, f in enumerate(files, 1):
         if tty:
             print(f"\rchecking {k}/{len(files)} recordings", end="", flush=True)
         params, samples = read_pcm(f)
-        runs = constant_runs(samples, params.framerate, args.min_run_ms)
+        rate = params.framerate
+        issues = []
+
+        if rate != args.rate:
+            issues.append(("sample rate", f"{rate} Hz, expected {args.rate} Hz"))
+        runs, clips = sample_runs(samples, rate, args.min_run_ms)
         if runs:
-            flagged += 1
             start, ms, value = max(runs, key=lambda r: r[1])
-            print(f"\r{f.relative_to(corpus).as_posix()}: {len(runs)} run(s) of identical "
-                  f"samples, longest {ms:.0f} ms of value {value} at {start:.2f} s")
-    print(f"\r{flagged} of {len(files)} recordings have runs of identical samples "
-          f"of {args.min_run_ms:g} ms or more")
+            issues.append(("identical samples", f"{len(runs)} run(s) of identical samples, "
+                           f"longest {ms:.0f} ms of value {value} at {start:.2f} s"))
+        if clips:
+            issues.append(("clipping", f"clipped in {clips} place(s)"))
+        peak = max((abs(s) for s in samples), default=0)
+        if 0 < peak < 4096:                    # under 12 bits of the 16 in use
+            issues.append(("low level", f"peak level only {20 * math.log10(peak / 32768):.0f} dBFS"))
+        # Padding only makes sense on clean audio: in noise, every frame is "loud".
+        if f.parent.name in ("enroll", "clean"):
+            lead, trail = padding(samples, rate)
+            if min(lead, trail) < 0.5:
+                issues.append(("short padding", f"{lead:.2f} s of quiet before the phrase "
+                               f"and {trail:.2f} s after; at least 0.5 s needed"))
+
+        if issues:
+            print(f"\r{f.relative_to(corpus).as_posix()}: " + "; ".join(t for _, t in issues))
+        for name, _ in issues:
+            totals[name] = totals.get(name, 0) + 1
+
+    print(f"\rchecked {len(files)} recordings" + (" " * 20 if tty else ""))
+    for name in ("sample rate", "identical samples", "clipping", "low level", "short padding"):
+        print(f"  {name + ':':<19} {totals.get(name, 0)} recording(s)")
 
 
 # ---------------------------------------------------------------- run
@@ -741,8 +830,10 @@ def main() -> None:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p = sub.add_parser("check", help="find runs of identical samples in enroll/test recordings")
+    p = sub.add_parser("check", help="check enroll/test recordings against the audio requirements")
     p.add_argument("--corpus", required=True)
+    p.add_argument("--rate", type=int, default=16000,
+                   help="expected sample rate in Hz (default 16000)")
     p.add_argument("--min-run-ms", type=float, default=10,
                    help="report runs of identical samples at least this long (default 10)")
     p.set_defaults(func=check)
@@ -1025,7 +1116,7 @@ snsr-eval -t spk1.snsr -v test-1.wav
 # Query a model's default sv-threshold (always pass an audio file)
 snsr-eval -t spk1.snsr -q sv-threshold test-1.wav
 
-# Check enrollment and test recordings for runs of identical samples
+# Check enrollment and test recordings against the audio requirements
 python enrolled_benchmark.py check --corpus my-corpus
 
 # Add noise from a folder of real noise recordings to every test/clean recording
