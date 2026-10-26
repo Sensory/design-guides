@@ -38,7 +38,8 @@
    - [8.1 Choosing an sv-threshold](#81-choosing-an-sv-threshold)
    - [8.2 Recognition Sensitivity vs. Verification](#82-recognition-sensitivity-vs-verification)
    - [8.3 Confidence Intervals](#83-confidence-intervals)
-   - [8.4 Example: Synthetic 55-Speaker Results](#84-example-synthetic-55-speaker-results)
+   - [8.4 Report Every Speaker](#84-report-every-speaker)
+   - [8.5 Example: Synthetic 55-Speaker Results](#85-example-synthetic-55-speaker-results)
 9. [Common Pitfalls](#9-common-pitfalls)
 10. [Quick Reference — Command Summary](#10-quick-reference--command-summary)
 11. [References](#11-references)
@@ -950,7 +951,17 @@ Use this to decide whether you have enough data for the claim you want to make. 
 
 Treat these bounds as optimistic. The rule of three assumes independent trials, but every model hears the same noise, so a stretch of noise that sounds like the phrase can trigger many models at once. That's another reason more hours of *different* noise matter more than more models listening to the same noise ([3.4](#34-non-target-audio-for-far)).
 
-### 8.4 Example: Synthetic 55-Speaker Results
+### 8.4 Report Every Speaker
+
+It's tempting to drop the few speakers with the worst results — someone with a 40% FRR probably had a poor enrollment, and in real life they might simply enroll again. Removing them can make the headline numbers look much better. Don't do it:
+
+- **Real users don't always re-enroll.** Many people who have a bad experience decide the feature doesn't work and stop using it. Those users are part of what the product will deliver, so they belong in the results.
+- **Any cutoff is arbitrary.** Excluding the worst 5% instead of 10%, or every speaker above 30% FRR instead of 40%, changes the result, and the choice then has to be justified and reported alongside it. Results with different cutoffs can't be compared.
+- **The enrollment checks are the filter.** Enrollment already rejects recordings that are too noisy, clipped, or inconsistent ([Creating and Using Enrolled Models §4.1](enrolled-models.md#41-the-two-step-enrollment-process)). Every speaker who gets through enrollment is a speaker the product would accept, so report all of them, including those with a high FRR or FAR.
+
+If a few speakers dominate the errors, that's a finding worth reporting in its own right — look at their enrollment recordings to see what went wrong, and consider whether the product should guide users to re-enroll. The confidence intervals ([8.3](#83-confidence-intervals)) already reflect how much these speakers swing the result.
+
+### 8.5 Example: Synthetic 55-Speaker Results
 
 For reference, this is a benchmark of one enrolled wake word phrase on Sensory-generated **synthetic** speakers — 55 speakers, each with 4 enrollment recordings and its own test recordings, noise added digitally:
 
@@ -978,6 +989,7 @@ Treat the IAR figures with caution: as described in [3.5](#35-real-vs-synthetic-
 - **Testing live instead of in simulation.** Live testing is slow, hard to repeat, and gives the same result as simulating the same audio ([1.3](#13-simulate-dont-test-live)).
 - **Over-the-air playback through a generic speaker.** Use clean, unmodified recordings through a speaker that accurately reproduces a human voice ([3.6](#36-if-you-must-record-over-the-air)).
 - **Relying only on synthetic speakers.** Synthetic data may overstate IAR; confirm with real speakers ([3.5](#35-real-vs-synthetic-speakers)).
+- **Excluding the worst-performing speakers.** Every speaker who passes enrollment is a real user the product would accept; dropping the ones with the highest FRR or FAR flatters the results and makes them depend on an arbitrary cutoff ([8.4](#84-report-every-speaker)).
 - **Benchmarking with a different enroller than the product uses.** Results only carry over to the enroller model — and the enrollment settings, such as `req-enroll` and `accuracy` — that the device actually uses.
 - **Putting `-s` before `-t` on the `snsr-eval` command line.** `snsr-eval` rejects it with `ERROR: set -t task before -f or -s options` — the task must come first.
 - **Running `snsr-eval -q` with no audio file.** With no file, `snsr-eval` listens to the live microphone and runs until you press Ctrl-C ([8.1](#81-choosing-an-sv-threshold)).
