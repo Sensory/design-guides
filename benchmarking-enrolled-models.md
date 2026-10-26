@@ -153,7 +153,15 @@ Contact your Sensory FAE about synthetic data for your phrase.
 
 ### 3.6 If You Must Record Over the Air
 
-If the test audio has to be played back over the air into the device — for example, to capture it through the device's own microphones — play back **unmodified, clean recordings** through a loudspeaker that accurately reproduces a human voice (such as an artificial mouth or a head-and-torso simulator), not a generic speaker. A small consumer speaker colors the audio and can change the results. Capture what the device hears once, then score the captured audio in simulation ([1.3](#13-simulate-dont-test-live)).
+The best way to get audio through the device's own microphones and front end is to record speakers on the device directly. Playing recordings back over the air into the device instead looks convenient, but every step of the playback chain changes the audio, so avoid it unless the whole chain is designed for it:
+
+- **Start from high-quality originals.** Play back **unmodified, clean recordings** made with a good microphone — playback can only add distortion, never remove it.
+- **Use a loudspeaker that reproduces a human voice accurately**, such as an artificial mouth or a head-and-torso simulator, or at least studio monitors. A small consumer speaker colors the audio and changes the results.
+- **Control the room.** Playback adds much more background noise and reverberation than most people expect, so use an acoustically treated room.
+- **Set up the geometry carefully.** If the device's microphone is very close to or very far from the loudspeaker, unusual frequency effects show up in the captured audio. Place it the way a user's mouth would be.
+- **Verify the result.** Before adding any noise, listen to the original and captured recordings side by side and compare their spectrograms, to confirm the chain hasn't distorted the audio.
+
+Capture what the device hears once, then score the captured audio in simulation ([1.3](#13-simulate-dont-test-live)), and run `check` on it like any other recordings ([3.7](#37-audio-requirements)).
 
 ### 3.7 Audio Requirements
 
@@ -1086,7 +1094,7 @@ Treat the IAR figures with caution: as described in [3.5](#35-real-vs-synthetic-
 - **Target phrase in the FAR noise.** A genuine occurrence of the phrase in TV or conversation audio is counted as a false accept — screen the noise first ([3.4](#34-non-target-audio-for-far)).
 - **Digital silence in the recordings.** Runs of zero samples never occur on a real device and skew results, especially in the `clean` condition — run `check` before benchmarking ([Step 2](#4-step-2--lay-out-the-corpus)).
 - **Testing live instead of in simulation.** Live testing is slow, hard to repeat, and gives the same result as simulating the same audio ([1.3](#13-simulate-dont-test-live)).
-- **Over-the-air playback through a generic speaker.** Use clean, unmodified recordings through a speaker that accurately reproduces a human voice ([3.6](#36-if-you-must-record-over-the-air)).
+- **Over-the-air playback without a controlled chain.** A generic speaker, an untreated room, or awkward microphone placement distorts the audio; record on the device directly, or control and verify the whole playback chain ([3.6](#36-if-you-must-record-over-the-air)).
 - **Relying only on synthetic speakers.** Synthetic data may overstate IAR; confirm with real speakers ([3.5](#35-real-vs-synthetic-speakers)).
 - **Excluding the worst-performing speakers.** Every speaker who passes enrollment is a real user the product would accept; dropping the ones with the highest FRR or FAR flatters the results and makes them depend on an arbitrary cutoff ([8.4](#84-report-every-speaker)).
 - **Benchmarking with a different enroller than the product uses.** Results only carry over to the enroller model — and the enrollment settings, such as `req-enroll` and `accuracy` — that the device actually uses.
