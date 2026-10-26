@@ -116,7 +116,15 @@ Each speaker also records **10–20 test recordings** of the same target phrase,
 To make the test recordings representative of how the product will actually be used:
 
 - Record them on a different day or in a different session from enrollment if possible, so they capture natural variation in the speaker's voice.
-- Vary distance, loudness, and direction the way real use will — for example, a laptop user may be at arm's length or across a desk. Sensory doesn't prescribe fixed distances or angles; match your product's use case, and record each distinct setup as its own condition (see [Step 2](#4-step-2--lay-out-the-corpus)) so you can compare them.
+- Vary the speaker's distance and direction from the microphone the way real use will — for example, a laptop user may be at arm's length or across a desk. Sensory doesn't prescribe fixed distances or angles; match your product's use case, and record each distinct setup as its own condition (see [Step 2](#4-step-2--lay-out-the-corpus)) so you can compare them.
+
+**Capture natural speech, not performed speech.** The test is only as realistic as the way people say the phrase. When someone uses a product, they're focused on what they want it to do, and they say the phrase naturally, as if talking to a person. Recording sessions easily produce something else:
+
+- **Don't ask speakers to change their voice.** Instructions like "now say it softer", "faster", or "slower" produce speech no one would use with a real device. Let loudness and speed vary naturally — for example with distance, or between sessions.
+- **Don't have them repeat the phrase over and over.** After a few repetitions in a row, people get bored and start saying it carelessly or with exaggerated variation. Mix the target phrase in among other prompts in random order, or have them say it followed by a different request each time, such as "Hey Sensory, what's the weather tomorrow?"
+- **Ask for the phrase without pauses between the words.** A pause inside the phrase raises the error rate considerably, and it's not how people say it in use.
+
+The same applies to enrollment: people tend to speak slowly and over-carefully when they know they're being recorded. Clear but natural speech gives the best enrolled model.
 - Cover noise by either recording in noisy conditions or — more commonly and more reproducibly — recording clean and **adding noise digitally afterwards** at fixed signal-to-noise ratios (see [Step 3](#5-step-3--add-noise-conditions)).
 
 ### 3.4 Non-Target Audio for FAR
