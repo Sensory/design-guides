@@ -63,6 +63,8 @@ An enrolled model can fail in three distinct ways, and each needs its own test a
 
 FRR and IAR are percentages of trials. FAR is a rate over time, so it's reported as false accepts per day (24 hours) of audio. Because every speaker's model listens to the same noise, the amount of audio tested is counted in **model-hours** (number of models × hours of noise), and FAR = false accepts ÷ model-hours × 24.
 
+**What counts as a day.** This guide counts all 24 hours of a day as noise, which is the stricter assumption. Most products spend part of the day somewhere quiet — overnight, for example — where false accepts almost never happen, so Sensory often reports FA/day assuming 16 hours of noise and 8 hours of quiet instead. A figure on that basis is two-thirds of the same figure on a 24-hour basis. Neither is wrong, but FA/day figures can only be compared when they use the same number of hours, so always state which one you used. The script prints it with the results, and `--noise-hours-per-day 16` switches to the 16-hour convention.
+
 These trade off against each other. Raising `sv-threshold` lowers IAR and FAR but raises FRR. Benchmark at the threshold the enrolled model ships with, and change it only if the results show a reason to — see [8.1](#81-choosing-an-sv-threshold).
 
 ### 1.2 Why Enrolled Models Need Their Own Benchmark
@@ -767,7 +769,8 @@ def run(args) -> None:
             frr[c] = 100 * fr / target if target else math.nan
             iar[c] = 100 * ia / imposter if imposter else math.nan
         hours = noise_hours * sum(weights)
-        fa_day = 24 * sum(w * false_accepts[k] for k, w in drawn) / hours if hours else math.nan
+        fa = sum(w * false_accepts[k] for k, w in drawn)
+        fa_day = args.noise_hours_per_day * fa / hours if hours else math.nan
         return frr, iar, fa_day
 
     # Bootstrap 95% confidence intervals: resample whole speakers with replacement,
@@ -809,13 +812,15 @@ def run(args) -> None:
                          "FRR_pct", "FRR_ci_low", "FRR_ci_high",
                          "imposter_trials", "imposter_accepts",
                          "IAR_pct", "IAR_ci_low", "IAR_ci_high",
-                         "false_accepts", "model_hours", "FA_per_day",
+                         "false_accepts", "model_hours", "noise_hours_per_day", "FA_per_day",
                          "FA_ci_low", "FA_ci_high"])
         if args.skip_noise:
             noise_txt = "noise skipped"
         else:
             noise_txt = f"{noise_hours:.2f} h noise ({model_hours:.2f} model-hours)"
         print(f"\n{n} speakers, {noise_txt}, sv-threshold {threshold}")
+        if not args.skip_noise:
+            print(f"FA/day counts {args.noise_hours_per_day:g} hours of noise as one day")
         if show_ci:
             print(f"95% confidence intervals from {args.bootstrap} bootstrap resamples of speakers")
         print()
@@ -829,10 +834,10 @@ def run(args) -> None:
             frr_ci = interval([s[0][c] for s in samples])
             iar_ci = interval([s[1][c] for s in samples])
             if args.skip_noise:
-                fa_cols, fa_txt = [""] * 5, f"{'skipped':>8}"
+                fa_cols, fa_txt = [""] * 6, f"{'skipped':>8}"
             else:
-                fa_cols = [sum(false_accepts), f"{model_hours:.2f}", f"{fa_day:.3f}",
-                           *ci_cols(fa_ci, ".3f")]
+                fa_cols = [sum(false_accepts), f"{model_hours:.2f}", f"{args.noise_hours_per_day:g}",
+                           f"{fa_day:.3f}", *ci_cols(fa_ci, ".3f")]
                 fa_txt = f"{fa_day:8.3f}" + ci_txt(fa_ci, ".3f")
             writer.writerow([threshold, c, n_t, fr, f"{frr[c]:.2f}", *ci_cols(frr_ci, ".2f"),
                              n_i, ia, f"{iar[c]:.2f}", *ci_cols(iar_ci, ".2f"), *fa_cols])
@@ -872,6 +877,9 @@ def main() -> None:
                    help="comma-separated test conditions to score, e.g. clean,snr40 (default: all)")
     p.add_argument("--skip-noise", action="store_true",
                    help="don't score the FAR noise (FA columns left blank)")
+    p.add_argument("--noise-hours-per-day", type=float, default=24,
+                   help="hours of noise counted as one day for FA/day (default 24; "
+                        "Sensory often uses 16, assuming 8 quiet hours)")
     p.add_argument("--bootstrap", type=int, default=1000,
                    help="bootstrap resamples for 95%% confidence intervals (default 1000, 0 = off)")
     p.add_argument("-j", "--jobs", type=int, default=1,
@@ -904,6 +912,7 @@ python enrolled_benchmark.py run \
 | `--sv-threshold` | Optional. Overrides the `sv-threshold` stored in each enrolled model. Leave it off to benchmark the model as it ships |
 | `--conditions` | Optional. Comma-separated test conditions to score, such as `clean,snr20`. Leave it off to score every condition folder |
 | `--skip-noise` | Optional. Don't score the FAR noise. The FA columns are reported as `skipped` in the table and left blank in `summary.csv` |
+| `--noise-hours-per-day` | Hours of noise counted as one day for FA/day (default `24`). Use `16` to match Sensory's 16-hours-of-noise convention — see [1.1](#11-the-three-metrics) |
 | `--bootstrap` | Number of bootstrap resamples used for the 95% confidence intervals (default `1000`). `0` turns the intervals off — see [8.3](#83-confidence-intervals) |
 | `-j`, `--jobs` | Number of speakers to enroll and score at once (default `1`). Set it to about the number of CPU cores — see below |
 
@@ -934,6 +943,7 @@ enrolling spk6
 scoring 100.0%  2/2 models  elapsed 00:27  remaining 00:00
 
 2 speakers, 0.01 h noise (0.01 model-hours), sv-threshold 0.49 (model default)
+FA/day counts 24 hours of noise as one day
 95% confidence intervals from 1000 bootstrap resamples of speakers
 
 condition                                 FRR                                IAR                 FA/day
@@ -948,7 +958,7 @@ snr5        25.00% (  1/4   ) [  0.00- 50.00]   0.00% (  0/4   ) [  0.00-  0.00]
 - **sv-threshold** — the threshold the models were scored at: the value stored in the enrolled models, or your `--sv-threshold` override. If the enrolled models store different values, all of them are listed.
 - **FRR** — false rejects ÷ target trials, for that condition.
 - **IAR** — imposter accepts ÷ imposter trials, for that condition.
-- **FA/day** — false accepts in the noise audio ÷ model-hours × 24. FAR doesn't depend on the test condition, so it repeats on every row.
+- **FA/day** — false accepts in the noise audio ÷ model-hours × the hours counted as a day (24 unless you set `--noise-hours-per-day`; the line above the table says which). FAR doesn't depend on the test condition, so it repeats on every row.
 - **[low-high]** — the 95% confidence interval for each figure, from bootstrapping ([8.3](#83-confidence-intervals)). The true rate for this population of speakers is likely to be inside it. Leave the intervals off with `--bootstrap 0`.
 
 The raw counts are shown in parentheses — always look at them alongside the percentage, since `0.00% (0/4)` and `0.00% (0/4000)` mean very different things. Here the snr20 interval of 0–50% shows how little two speakers can tell you.
