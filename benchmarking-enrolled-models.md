@@ -128,7 +128,9 @@ FAR audio is the easiest data to collect, since it doesn't need volunteers: any 
 
 Every speaker's model is scored on all of the noise, so these amounts are hours of noise audio, not totals divided across models. Reusing the same noise across many models is what makes FAR testing of enrolled models practical, but it doesn't replace hours: 2 hours of noise heard by 50 models isn't the same as 100 hours of different noise.
 
-Screen the audio for the target phrase (and close soundalikes, if you want to keep them out) before using it — a genuine occurrence of the phrase in the noise would be scored as a false accept.
+**Mix the noise types the product will hear.** FAR depends heavily on the kind of noise: it's usually higher on speech, TV, and radio than on car or fan noise. Use a mixture that reflects a typical day for the product, in roughly the proportions the product will hear each type. If you don't know the proportions, use equal amounts of each — for example office noise, babble (several people talking at once), car noise, household noise, single-speaker speech, and TV and radio. Speech, TV, and radio should be in the same language as the trigger phrase. Ideally, record the noise through the device's own microphone.
+
+Screen the audio for the target phrase (and close soundalikes, if you want to keep them out) before using it — a genuine occurrence of the phrase in the noise would be scored as a false accept. Don't record FAR noise in the office where the product is being developed, where people say the phrase while they work on it.
 
 ### 3.5 Real vs. Synthetic Speakers
 
@@ -175,11 +177,17 @@ my-corpus/
 
 ## 5. Step 3 — Add Noise Conditions
 
-To test in noise, mix noise into each clean test recording at fixed signal-to-noise ratios. Sensory typically uses **30, 20, 10, and 5 dBA SNR**, but use whatever range matches your product. The script's `noisify` subcommand reads every `test/clean/*.wav` file, mixes in a random segment of a noise file at each SNR, and writes the results to `test/snr30/`, `test/snr20/`, and so on:
+To test in noise, mix noise into each clean test recording at fixed signal-to-noise ratios. Sensory typically uses **30, 20, 10, and 5 dBA SNR**, but use whatever range matches your product. The script's `noisify` subcommand reads every `test/clean/*.wav` file, mixes in a random segment of noise at each SNR, and writes the results to `test/snr30/`, `test/snr20/`, and so on:
 
 ```bash
-python enrolled_benchmark.py noisify --corpus my-corpus --noise babble.wav --snr 30,20,10,5
+python enrolled_benchmark.py noisify --corpus my-corpus --noise mix-noise --snr 30,20,10,5
 ```
+
+**Which noise to use.** `--noise` takes a folder of noise recordings (or a single file). For each test recording, `noisify` picks one file from the folder at random and mixes in a random segment of it. Use the same principles as for FAR noise ([3.4](#34-non-target-audio-for-far)):
+
+- **Use real recordings, mixed by type.** Put recordings of each noise type the product will hear in the folder — competing speakers, TV, radio, car, and so on. Files are picked in proportion to their length, so the mix follows how many hours of each type the folder holds. Agree the mix in advance with everyone comparing results, written for example as `{competing speaker 33%, TV 20%, radio 13%, car 34%}`.
+- **Avoid synthetic, steady noise.** White, pink, or brown noise — even filtered — has the same character from moment to moment. The recognizer's normalization removes that kind of noise easily, so results on it look better than they will in real life. Real noise changes over time, which is what makes it hard.
+- **Don't focus on extreme levels.** Results at very low SNRs say little about everyday use, and tuning settings to fix them usually makes IAR and FAR worse at typical levels.
 
 **How SNR is measured.** SNR should compare the level of the *speech* with the level of the noise. A test recording also contains silence before and after the phrase, and that silence has to stay in the file: enrollment and recognition both use the audio around the phrase, so trimming it would change the results. If the speech level were averaged over the whole file, the silence would pull it down, and a recording mixed at "5 dB" would really have a much higher SNR on the speech. `noisify` avoids this without any trimming:
 
@@ -189,10 +197,11 @@ python enrolled_benchmark.py noisify --corpus my-corpus --noise babble.wav --snr
 
 Other details:
 
-- The noise file must be 16-bit mono PCM at the same sample rate as the corpus, and longer than any test recording.
+- Noise files must be 16-bit mono PCM at the same sample rate as the corpus. A file shorter than a test recording isn't used for that recording; at least one file must be longer than every test recording.
+- `noisify` writes `noisify-log.csv` in the corpus folder, listing which noise file and starting point went into each test recording, so you can trace a surprising result back to its noise.
 - The 30 dB frame range assumes the clean recordings really are quiet. If a "clean" recording's background noise is within 30 dB of its speech, some background frames are counted as speech, which lowers the measured speech level, so the real SNR on the speech comes out somewhat higher than requested.
-- The random noise segment is seeded, so re-running `noisify` reproduces the same noisy corpus.
-- Use a different noise recording here from the FAR noise in `noise/`, so the two tests stay independent.
+- The random choices are seeded, so re-running `noisify` with the same noise folder reproduces the same noisy corpus.
+- Use different noise recordings here from the FAR noise in `noise/`, and keep the folder outside the corpus folder, so the two tests stay independent.
 
 ---
 
@@ -331,20 +340,37 @@ def speech_power(weighted, rate: int, frame_ms: int = 20, range_db: float = 30.0
 
 def noisify(args) -> None:
     corpus = Path(args.corpus)
-    noise_params, noise = read_pcm(Path(args.noise))
+    source = Path(args.noise)
+    noise_files = sorted(source.glob("*.wav")) if source.is_dir() else [source]
+    if not noise_files:
+        sys.exit(f"no .wav files in {source}")
+    noise_info = {}                            # file -> (sample rate, length in samples)
+    for f in noise_files:
+        with wave.open(str(f)) as w:
+            if w.getsampwidth() != 2 or w.getnchannels() != 1:
+                sys.exit(f"{f}: expected 16-bit mono PCM")
+            noise_info[f] = (w.getframerate(), w.getnframes())
     rng = random.Random(0)  # fixed seed: the noisy corpus is reproducible
     snrs = [int(s) for s in args.snr.split(",")]
 
     cleans = sorted(corpus.glob("speakers/*/test/clean/*.wav"))
+    log = [["recording", "noise_file", "noise_start_s"]]
     for k, clean in enumerate(cleans, 1):
         params, speech = read_pcm(clean)
         rate = params.framerate
-        if noise_params.framerate != rate:
-            sys.exit(f"{args.noise}: {noise_params.framerate} Hz, but {clean} is {rate} Hz")
-        if len(noise) < len(speech):
-            sys.exit(f"{args.noise} is shorter than {clean}")
-        start = rng.randrange(0, len(noise) - len(speech) + 1)
-        segment = noise[start:start + len(speech)]
+        usable = [f for f in noise_files
+                  if noise_info[f][0] == rate and noise_info[f][1] >= len(speech)]
+        if not usable:
+            sys.exit(f"no noise file at {rate} Hz is as long as {clean}")
+        # Pick a noise file with probability proportional to its length, so the
+        # mix of noise types follows how many hours of each the folder holds.
+        noise_file = usable[0] if len(usable) == 1 else \
+            rng.choices(usable, weights=[noise_info[f][1] for f in usable])[0]
+        start = rng.randrange(0, noise_info[noise_file][1] - len(speech) + 1)
+        with wave.open(str(noise_file)) as w:
+            w.setpos(start)
+            segment = array.array("h", w.readframes(len(speech)))
+        log.append([clean.relative_to(corpus).as_posix(), noise_file.name, f"{start / rate:.3f}"])
 
         # SNR in dBA: A-weighted speech level over the loud frames only, against
         # the A-weighted level of the noise segment actually mixed in. The audio
@@ -366,7 +392,10 @@ def noisify(args) -> None:
                 w.setparams(params)
                 w.writeframes(mixed.tobytes())
         print(f"\rnoisified {k}/{len(cleans)} recordings", end="", flush=True)
-    print(f"\nwrote {', '.join(f'snr{s}' for s in snrs)} test conditions (SNR in dBA)")
+    with open(corpus / "noisify-log.csv", "w", newline="", encoding="utf-8") as fh:
+        csv.writer(fh).writerows(log)
+    print(f"\nwrote {', '.join(f'snr{s}' for s in snrs)} test conditions (SNR in dBA)"
+          f" and {corpus / 'noisify-log.csv'}")
 
 
 # ---------------------------------------------------------------- run
@@ -650,7 +679,8 @@ def main() -> None:
 
     p = sub.add_parser("noisify", help="mix noise into test/clean at fixed SNRs")
     p.add_argument("--corpus", required=True)
-    p.add_argument("--noise", required=True, help="16-bit mono noise WAV, same rate as corpus")
+    p.add_argument("--noise", required=True,
+                   help="folder of 16-bit mono noise WAVs (or one WAV), same rate as corpus")
     p.add_argument("--snr", default="30,20,10,5", help="comma-separated SNRs in dBA")
     p.set_defaults(func=noisify)
 
@@ -913,8 +943,9 @@ snsr-eval -t spk1.snsr -v test-1.wav
 # Query a model's default sv-threshold (always pass an audio file)
 snsr-eval -t spk1.snsr -q sv-threshold test-1.wav
 
-# Add noise to every test/clean recording at 30/20/10/5 dBA SNR
-python enrolled_benchmark.py noisify --corpus my-corpus --noise babble.wav --snr 30,20,10,5
+# Add noise from a folder of real noise recordings to every test/clean recording
+# at 30/20/10/5 dBA SNR
+python enrolled_benchmark.py noisify --corpus my-corpus --noise mix-noise --snr 30,20,10,5
 
 # Enroll every speaker and score at each model's own sv-threshold
 python enrolled_benchmark.py run --sdk <sdk-root> \
