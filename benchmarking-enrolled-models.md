@@ -100,7 +100,7 @@ Small tests are the most common benchmarking mistake. Testing with a handful of 
 | Speakers (each enrolls and records test audio) | 50 | 100 or more |
 | Enrollment recordings per speaker | 4 | 4 (match what your product will ask for) |
 | Test recordings per speaker | 10 | 20 |
-| Non-target audio for FAR | 2 hours | As much as you can — 24 hours or more |
+| Non-target audio for FAR (every model hears all of it) | 15 hours, for quick informal tests | 150 hours, for statistically accurate results |
 
 Because every speaker serves as an imposter for every other speaker, the number of imposter trials grows with the square of the speaker count: 50 speakers × 15 test recordings each gives 750 target trials but 36,750 imposter trials. More speakers is what improves IAR confidence the most.
 
@@ -120,7 +120,13 @@ To make the test recordings representative of how the product will actually be u
 
 ### 3.4 Non-Target Audio for FAR
 
-FAR audio is the easiest data to collect, since it doesn't need volunteers: any long recording of realistic sound that doesn't contain the target phrase works — conversations, TV and radio, music, room and household noise. The challenge is quantity. False accepts are rare events, so you need many hours of audio to see enough of them (or to be confident there are few — see [8.3](#83-confidence-when-you-see-zero-errors)). Use **at least 2 hours**; more is better.
+FAR audio is the easiest data to collect, since it doesn't need volunteers: any long recording of realistic sound that doesn't contain the target phrase works — conversations, TV and radio, music, room and household noise. The challenge is quantity. False accepts are rare events, so you need many hours of audio to see enough of them (or to be confident there are few — see [8.3](#83-confidence-when-you-see-zero-errors)):
+
+- **15 hours** is the absolute minimum, and only for quick, informal tests where statistical significance isn't needed.
+- **150 hours** is what you need for statistically accurate results. It's also the amount Sensory evaluates each enrolled model on before delivering a model.
+- As a rule of thumb, evaluate every model on at least as many hours of noise as one false accept is allowed to take at your target rate. For example, a target of 0.05 FA/hour (1.2 FA/day, or one false accept per 20 hours) needs at least 20 hours of noise per model, and even that isn't enough to show the target is met with confidence.
+
+Every speaker's model is scored on all of the noise, so these amounts are hours of noise audio, not totals divided across models. Reusing the same noise across many models is what makes FAR testing of enrolled models practical, but it doesn't replace hours: 2 hours of noise heard by 50 models isn't the same as 100 hours of different noise.
 
 Screen the audio for the target phrase (and close soundalikes, if you want to keep them out) before using it — a genuine occurrence of the phrase in the noise would be scored as a false accept.
 
@@ -635,9 +641,9 @@ Enrolled models are saved to `<out>/models/<speaker>.snsr` and reused if they al
 
 Each run overwrites `<out>/summary.csv`, so copy it somewhere else first if you want to compare runs.
 
-Each speaker's model is evaluated against every test recording in the corpus and all of the FAR noise, so run time grows with the square of the number of speakers, plus the number of speakers × hours of noise. Enrollment adds a fixed cost per speaker, roughly 15 seconds each on a desktop PC with `udt-universal-3.67.1.0.snsr`. As a rough guide for scoring, one enrolled model processed an hour of audio in about 4 seconds on the same PC, so 24 hours of noise takes about 100 seconds per model, or about 85 minutes for 50 speakers with `-j 1`.
+Each speaker's model is evaluated against every test recording in the corpus and all of the FAR noise, so run time grows with the square of the number of speakers, plus the number of speakers × hours of noise. Enrollment adds a fixed cost per speaker, roughly 15 seconds each on a desktop PC with `udt-universal-3.67.1.0.snsr`. As a rough guide for scoring, one enrolled model processed an hour of audio in about 4 seconds on the same PC, so the recommended 150 hours of noise takes about 10 minutes per model, or about 8 hours for 50 speakers with `-j 1`. The 15-hour minimum takes about a minute per model.
 
-`-j` divides that time across CPU cores. Each job runs its own `spot-enroll` and `snsr-eval` processes for one speaker at a time, so set `-j` to about the number of cores on the machine. On an 8-core PC, a 16-speaker corpus with an hour of noise took 4 minutes 49 seconds with `-j 1` and 51 seconds with `-j 8`. The results are identical for any `-j` value: every model is still scored on exactly the same audio; it's just scored alongside other models instead of after them ([1.3](#13-simulate-dont-test-live)).
+`-j` divides that time across CPU cores. Each job runs its own `spot-enroll` and `snsr-eval` processes for one speaker at a time, so set `-j` to about the number of cores on the machine. On an 8-core PC, a 16-speaker corpus with an hour of noise took 4 minutes 49 seconds with `-j 1` and 51 seconds with `-j 8`, so the 8-hour, 50-speaker run above drops to roughly 1½ hours on such a machine. The results are identical for any `-j` value: every model is still scored on exactly the same audio; it's just scored alongside other models instead of after them ([1.3](#13-simulate-dont-test-live)).
 
 **Quicker partial runs.** Scoring the FAR noise usually takes most of the run time, so while you're setting up a corpus or trying a different `--sv-threshold`, it can help to leave parts out:
 
@@ -760,7 +766,15 @@ A result of zero errors doesn't mean the true rate is zero — only that it's to
 | 0 imposter accepts in 750 trials | ≈ 3 / 750 = 0.4% IAR |
 | 0 false rejects in 100 trials | ≈ 3 / 100 = 3% FRR |
 
-Use this to decide whether you have enough data for the claim you want to make. For example, to show FAR is below 0.1 FA/day with zero observed false accepts, you need about 3 / 0.1 = 30 model-days (720 model-hours) of noise. With 50 speakers that's about 14.4 hours of noise audio; 2 hours (100 model-hours, 4.2 model-days) only shows FAR is below about 0.72 FA/day.
+Use this to decide whether you have enough data for the claim you want to make. For example, to show FAR is below 0.1 FA/day with zero observed false accepts, you need about 3 / 0.1 = 30 model-days (720 model-hours) of noise. With 50 speakers:
+
+| Hours of noise | Model-days (50 models) | 95% upper bound with 0 false accepts |
+|---|---|---|
+| 2 | 4.2 | ≈ 0.72 FA/day |
+| 15 (minimum) | 31 | ≈ 0.096 FA/day |
+| 150 (recommended) | 312 | ≈ 0.0096 FA/day |
+
+Treat these bounds as optimistic. The rule of three assumes independent trials, but every model hears the same noise, so a stretch of noise that sounds like the phrase can trigger many models at once. That's another reason more hours of *different* noise matter more than more models listening to the same noise ([3.4](#34-non-target-audio-for-far)).
 
 ### 8.4 Example: Synthetic 55-Speaker Results
 
@@ -774,7 +788,7 @@ For reference, this is a benchmark of one enrolled wake word phrase on Sensory-g
 | 10 dB | 7.84% | 3.33% |
 | 5 dB | 13.94% | 1.88% |
 
-FAR was **0 false accepts over 110 model-hours** (55 models × a 2-hour conversational noise file) — under about 0.65 FA/day by the rule of three ([8.3](#83-confidence-when-you-see-zero-errors)).
+FAR was **0 false accepts over 110 model-hours** (55 models × a 2-hour conversational noise file) — under about 0.65 FA/day by the rule of three ([8.3](#83-confidence-when-you-see-zero-errors)). Two hours is well below the 15-hour minimum in [3.4](#34-non-target-audio-for-far), so this FAR is only a rough indication.
 
 Treat the IAR figures with caution: as described in [3.5](#35-real-vs-synthetic-speakers), a limited cloned-voice library can make synthetic speakers more alike than real ones, and real-speaker tests have shown IARs much closer to zero. This is exactly why a benchmark should include real speakers before the numbers are used for a product decision.
 
