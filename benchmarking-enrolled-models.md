@@ -173,6 +173,19 @@ my-corpus/
 - **Condition folder names** under `test/` are free-form — `clean`, `snr20`, `arms-length`, `across-room` — and each is reported separately. Folders named `snrNN` sort from least to most noisy after `clean`.
 - Every speaker should have the same set of condition folders, so each condition has the same speakers behind it.
 
+**Check the recordings before you benchmark.** A real microphone always picks up a little noise, so even the quiet parts of a real recording change slightly from one sample to the next. Long runs of exactly the same sample value — usually zeros, "digital silence" — never happen on a device. They come from synthetic or edited audio, splicing, or dropped audio buffers, and they give the recognizer a perfectly silent background it will never hear in use, which can skew results. The script's `check` subcommand scans every enrollment and test recording for runs of identical samples:
+
+```bash
+python enrolled_benchmark.py check --corpus my-corpus
+```
+
+```
+speakers/spk012/test/clean/007.wav: 2 run(s) of identical samples, longest 200 ms of value 0 at 0.10 s
+1 of 1840 recordings have runs of identical samples of 10 ms or more
+```
+
+By default it reports runs of 10 ms or more; change that with `--min-run-ms`. Fix flagged recordings at the source — re-record, re-capture, or regenerate them — rather than editing the audio. Adding noise hides the runs in the noisy conditions but not in `clean`, so a corpus with digital silence can show a *higher* FRR on clean audio than with light noise added.
+
 ---
 
 ## 5. Step 3 — Add Noise Conditions
@@ -244,6 +257,7 @@ Corpus layout (one target phrase per corpus):
   <corpus>/noise/*.wav                                non-target audio (optional)
 
 Subcommands:
+  check    find artificial runs of identical samples in the recordings
   noisify  mix noise into clean test recordings at fixed SNRs
   run      enroll every speaker, then score every model
 """
@@ -251,6 +265,7 @@ Subcommands:
 import argparse
 import array
 import csv
+import itertools
 import math
 import random
 import subprocess
@@ -391,11 +406,51 @@ def noisify(args) -> None:
             with wave.open(str(out), "wb") as w:
                 w.setparams(params)
                 w.writeframes(mixed.tobytes())
-        print(f"\rnoisified {k}/{len(cleans)} recordings", end="", flush=True)
+        if sys.stdout.isatty():
+            print(f"\rnoisified {k}/{len(cleans)} recordings", end="", flush=True)
     with open(corpus / "noisify-log.csv", "w", newline="", encoding="utf-8") as fh:
         csv.writer(fh).writerows(log)
-    print(f"\nwrote {', '.join(f'snr{s}' for s in snrs)} test conditions (SNR in dBA)"
+    print(("\n" if sys.stdout.isatty() else "") +
+          f"wrote {', '.join(f'snr{s}' for s in snrs)} test conditions (SNR in dBA)"
           f" and {corpus / 'noisify-log.csv'}")
+
+
+# ---------------------------------------------------------------- check
+
+def constant_runs(samples, rate: int, min_ms: float):
+    """Return (start seconds, length ms, value) for each run of identical samples.
+
+    A real microphone always picks up some noise, so even a quiet recording
+    changes from sample to sample. Long runs of one value (usually 0) are
+    artificial: digital silence, splicing, or a dropped audio buffer.
+    """
+    runs, pos = [], 0
+    for value, group in itertools.groupby(samples):
+        n = sum(1 for _ in group)
+        if n * 1000 >= min_ms * rate:
+            runs.append((pos / rate, n * 1000 / rate, value))
+        pos += n
+    return runs
+
+
+def check(args) -> None:
+    corpus = Path(args.corpus)
+    files = sorted(corpus.glob("speakers/*/enroll/*.wav")) + \
+        sorted(corpus.glob("speakers/*/test/*/*.wav"))
+    tty = sys.stdout.isatty()
+    flagged = 0
+    for k, f in enumerate(files, 1):
+        if tty:
+            print(f"\rchecking {k}/{len(files)} recordings", end="", flush=True)
+        params, samples = read_pcm(f)
+        runs = constant_runs(samples, params.framerate, args.min_run_ms)
+        if runs:
+            flagged += 1
+            start, ms, value = max(runs, key=lambda r: r[1])
+            print(f"\r{f.relative_to(corpus).as_posix()}: {len(runs)} run(s) of identical "
+                  f"samples, longest {ms:.0f} ms of value {value} at {start:.2f} s")
+    print(f"\r{flagged} of {len(files)} recordings have runs of identical samples "
+          f"of {args.min_run_ms:g} ms or more")
 
 
 # ---------------------------------------------------------------- run
@@ -677,6 +732,12 @@ def main() -> None:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
 
+    p = sub.add_parser("check", help="find runs of identical samples in enroll/test recordings")
+    p.add_argument("--corpus", required=True)
+    p.add_argument("--min-run-ms", type=float, default=10,
+                   help="report runs of identical samples at least this long (default 10)")
+    p.set_defaults(func=check)
+
     p = sub.add_parser("noisify", help="mix noise into test/clean at fixed SNRs")
     p.add_argument("--corpus", required=True)
     p.add_argument("--noise", required=True,
@@ -913,6 +974,7 @@ Treat the IAR figures with caution: as described in [3.5](#35-real-vs-synthetic-
 - **Testing on enrollment recordings.** Scoring a model against the audio it was trained on makes FRR look artificially low ([3.3](#33-test-recordings)).
 - **Imposters saying a different phrase.** IAR measures other speakers saying the **same** target phrase. A different phrase is mostly rejected by the recognition step and makes IAR look better than it is — keep each corpus to one phrase.
 - **Target phrase in the FAR noise.** A genuine occurrence of the phrase in TV or conversation audio is counted as a false accept — screen the noise first ([3.4](#34-non-target-audio-for-far)).
+- **Digital silence in the recordings.** Runs of zero samples never occur on a real device and skew results, especially in the `clean` condition — run `check` before benchmarking ([Step 2](#4-step-2--lay-out-the-corpus)).
 - **Testing live instead of in simulation.** Live testing is slow, hard to repeat, and gives the same result as simulating the same audio ([1.3](#13-simulate-dont-test-live)).
 - **Over-the-air playback through a generic speaker.** Use clean, unmodified recordings through a speaker that accurately reproduces a human voice ([3.6](#36-if-you-must-record-over-the-air)).
 - **Relying only on synthetic speakers.** Synthetic data may overstate IAR; confirm with real speakers ([3.5](#35-real-vs-synthetic-speakers)).
@@ -942,6 +1004,9 @@ snsr-eval -t spk1.snsr -v test-1.wav
 
 # Query a model's default sv-threshold (always pass an audio file)
 snsr-eval -t spk1.snsr -q sv-threshold test-1.wav
+
+# Check enrollment and test recordings for runs of identical samples
+python enrolled_benchmark.py check --corpus my-corpus
 
 # Add noise from a folder of real noise recordings to every test/clean recording
 # at 30/20/10/5 dBA SNR
