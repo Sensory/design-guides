@@ -3,8 +3,8 @@
 **Product:** TrulyHandsfree (THF) and TrulyNatural (TNL) SDKs  
 **Models:** Enrolled models produced by the enroller task models (`udt-*.snsr`, `eft-*.snsr`)  
 **Version:** THF / TNL 7.8.0+ (examples run on TNL 7.9.0)  
-**Document Version:** 1.0.0  
-**Last Modified:** 2026-10-19  
+**Document Version:** 1.1.0  
+**Last Modified:** 2026-10-26  
 **Audience:** Field Application Engineers, Customer Integration Engineers, external developers and integration partners  
 **Status:** Released
 
@@ -232,6 +232,8 @@ import math
 import random
 import subprocess
 import sys
+import threading
+import time
 import wave
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -311,6 +313,7 @@ def evaluate(sdk: Path, model: Path, files, work: Path, threshold=None):
     list_file = work / "list.txt"
     out_file = work / "results.txt"
     list_file.write_text("\n".join(str(f) for f in files) + "\n", encoding="utf-8")
+    out_file.unlink(missing_ok=True)  # don't let a previous run's results look like progress
     cmd = [exe(sdk, "snsr-eval"), "-t", str(model)]
     if threshold is not None:
         cmd += ["-s", f"sv-threshold={threshold}"]
@@ -325,6 +328,78 @@ def evaluate(sdk: Path, model: Path, files, work: Path, threshold=None):
     return counts
 
 
+class Progress:
+    """One-line progress display, weighted by seconds of audio scored.
+
+    Polls each running job's results.txt (one line per finished file), so the
+    percentage moves while long snsr-eval jobs run, not only when they finish.
+    """
+
+    def __init__(self, files, n_models):
+        self.cum = [0.0]                       # cum[k] = audio seconds in the first k files
+        for f in files:
+            self.cum.append(self.cum[-1] + wav_seconds(f))
+        self.per_model = self.cum[-1]
+        self.total = self.per_model * n_models
+        self.n_models = n_models
+        self.done = 0
+        self.active = set()                    # results.txt paths being written now
+        self.lock = threading.Lock()
+        self.start = time.time()
+        self.tty = sys.stdout.isatty()
+        self.last_step = -1
+        self.stop = threading.Event()
+        self.thread = threading.Thread(target=self._loop, daemon=True)
+
+    def _partial(self, path: Path) -> float:
+        try:
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                k = sum(1 for _ in fh)
+        except OSError:
+            return 0.0
+        return self.cum[min(k, len(self.cum) - 1)]
+
+    def _line(self) -> tuple:
+        with self.lock:
+            done, active = self.done, list(self.active)
+        secs = done * self.per_model + sum(self._partial(p) for p in active)
+        frac = min(secs / self.total, 1.0) if self.total else 1.0
+        elapsed = time.time() - self.start
+        eta = elapsed * (1 - frac) / frac if frac > 0.001 else None
+        clock = lambda t: "--:--" if t is None else f"{int(t) // 60:02d}:{int(t) % 60:02d}"
+        return (f"scoring {100 * frac:5.1f}%  {done}/{self.n_models} models  "
+                f"elapsed {clock(elapsed)}  remaining {clock(eta)}"), frac
+
+    def show(self, final=False) -> None:
+        text, frac = self._line()
+        if self.tty:
+            print("\r" + text.ljust(70), end="\n" if final else "", flush=True)
+        else:                                  # redirected output: print every 10%
+            step = int(frac * 10)
+            if step > self.last_step or final:
+                self.last_step = step
+                print(text, flush=True)
+
+    def message(self, text: str) -> None:
+        """Print a normal line without leaving a half-drawn progress line above it."""
+        if self.tty:
+            print("\r" + " " * 70 + "\r", end="")
+        print(text, flush=True)
+
+    def _loop(self) -> None:
+        while not self.stop.wait(1.0):
+            self.show()
+
+    def __enter__(self):
+        self.thread.start()
+        return self
+
+    def __exit__(self, *exc):
+        self.stop.set()
+        self.thread.join()
+        self.show(final=True)
+
+
 def run(args) -> None:
     sdk = Path(args.sdk)
     corpus = Path(args.corpus)
@@ -334,7 +409,12 @@ def run(args) -> None:
     speakers = sorted(p for p in (corpus / "speakers").iterdir() if p.is_dir())
     tests = [(spk.name, f.parent.name, f)
              for spk in speakers for f in sorted(spk.glob("test/*/*.wav"))]
-    noise = sorted((corpus / "noise").glob("*.wav"))
+    if args.conditions:
+        wanted = {c.strip() for c in args.conditions.split(",")}
+        tests = [t for t in tests if t[1] in wanted]
+        if not tests:
+            sys.exit(f"no test recordings in conditions: {args.conditions}")
+    noise = [] if args.skip_noise else sorted((corpus / "noise").glob("*.wav"))
     noise_hours = sum(wav_seconds(f) for f in noise) / 3600
     # clean first, then snrNN from least to most noisy
     conditions = sorted({cond for _, cond, _ in tests},
@@ -344,20 +424,29 @@ def run(args) -> None:
         """Enroll one speaker if needed, then score their model on everything."""
         model = out / "models" / f"{spk.name}.snsr"
         if not model.exists():
-            print(f"enrolling {spk.name}")
+            progress.message(f"enrolling {spk.name}")
             enroll(sdk, args.enroller, spk, model)
         threshold = None
         if args.sv_threshold is None:
             threshold = sv_threshold(sdk, model, tests[0][2])
         work = out / "work" / spk.name  # each job needs its own list/results files
         work.mkdir(parents=True, exist_ok=True)
-        counts = evaluate(sdk, model, [f for _, _, f in tests] + noise, work,
-                          args.sv_threshold)
+        results_file = work / "results.txt"
+        with progress.lock:
+            progress.active.add(results_file)
+        try:
+            counts = evaluate(sdk, model, [f for _, _, f in tests] + noise, work,
+                              args.sv_threshold)
+        finally:
+            with progress.lock:
+                progress.active.discard(results_file)
+                progress.done += 1
         return spk.name, threshold, counts
 
     # Each job runs its own spot-enroll/snsr-eval processes, so -j N uses N cores.
     # Results are identical for any -j: each model is still scored on the same audio.
-    with ThreadPoolExecutor(max_workers=args.jobs) as pool:
+    progress = Progress([f for _, _, f in tests] + noise, len(speakers))
+    with progress, ThreadPoolExecutor(max_workers=args.jobs) as pool:
         results = list(pool.map(score, speakers))
 
     # tally[condition] = [target, fr, imposter, ia]
@@ -391,17 +480,25 @@ def run(args) -> None:
         writer.writerow(["sv_threshold", "condition", "target_trials", "false_rejects",
                          "FRR_pct", "imposter_trials", "imposter_accepts", "IAR_pct",
                          "false_accepts", "model_hours", "FA_per_day"])
-        print(f"\n{len(speakers)} speakers, {noise_hours:.2f} h noise "
-              f"({model_hours:.2f} model-hours), sv-threshold {threshold}\n")
+        if args.skip_noise:
+            noise_txt = "noise skipped"
+        else:
+            noise_txt = f"{noise_hours:.2f} h noise ({model_hours:.2f} model-hours)"
+        print(f"\n{len(speakers)} speakers, {noise_txt}, sv-threshold {threshold}\n")
         print(f"{'condition':<10} {'FRR':>16} {'IAR':>16} {'FA/day':>8}")
         for c in conditions:
             n_t, fr, n_i, ia = tally[c]
             frr = 100 * fr / n_t if n_t else float("nan")
             iar = 100 * ia / n_i if n_i else float("nan")
+            if args.skip_noise:
+                fa_cols, fa_txt = ["", "", ""], f"{'skipped':>8}"
+            else:
+                fa_cols = [false_accepts, f"{model_hours:.2f}", f"{fa_day:.3f}"]
+                fa_txt = f"{fa_day:8.3f}"
             writer.writerow([threshold, c, n_t, fr, f"{frr:.2f}", n_i, ia, f"{iar:.2f}",
-                             false_accepts, f"{model_hours:.2f}", f"{fa_day:.3f}"])
+                             *fa_cols])
             print(f"{c:<10} {frr:6.2f}% ({fr:>3}/{n_t:<4}) "
-                  f"{iar:6.2f}% ({ia:>3}/{n_i:<4}) {fa_day:8.3f}")
+                  f"{iar:6.2f}% ({ia:>3}/{n_i:<4}) {fa_txt}")
     print(f"\nwrote {out / 'summary.csv'}")
 
 
@@ -423,6 +520,10 @@ def main() -> None:
     p.add_argument("--out", required=True, help="output folder for models and summary.csv")
     p.add_argument("--sv-threshold", type=float,
                    help="override the sv-threshold stored in each enrolled model")
+    p.add_argument("--conditions",
+                   help="comma-separated test conditions to score, e.g. clean,snr40 (default: all)")
+    p.add_argument("--skip-noise", action="store_true",
+                   help="don't score the FAR noise (FA columns left blank)")
     p.add_argument("-j", "--jobs", type=int, default=1,
                    help="number of speakers to enroll and score at once (default 1)")
     p.set_defaults(func=run)
@@ -451,6 +552,8 @@ python enrolled_benchmark.py run \
 | `--corpus` | Corpus folder laid out as in [Step 2](#4-step-2--lay-out-the-corpus) |
 | `--out` | Output folder for the enrolled models (`models/`) and `summary.csv` |
 | `--sv-threshold` | Optional. Overrides the `sv-threshold` stored in each enrolled model. Leave it off to benchmark the model as it ships |
+| `--conditions` | Optional. Comma-separated test conditions to score, such as `clean,snr20`. Leave it off to score every condition folder |
+| `--skip-noise` | Optional. Don't score the FAR noise. The FA columns are reported as `skipped` in the table and left blank in `summary.csv` |
 | `-j`, `--jobs` | Number of speakers to enroll and score at once (default `1`). Set it to about the number of CPU cores — see below |
 
 Enrolled models are saved to `<out>/models/<speaker>.snsr` and reused if they already exist, so you can re-run with `--sv-threshold` without re-enrolling. Delete `<out>/models/` to re-enroll — for example, after changing the enroller model or the enrollment recordings.
@@ -461,11 +564,24 @@ Each speaker's model is evaluated against every test recording in the corpus and
 
 `-j` divides that time across CPU cores. Each job runs its own `spot-enroll` and `snsr-eval` processes for one speaker at a time, so set `-j` to about the number of cores on the machine. On an 8-core PC, a 16-speaker corpus with an hour of noise took 4 minutes 49 seconds with `-j 1` and 51 seconds with `-j 8`. The results are identical for any `-j` value: every model is still scored on exactly the same audio; it's just scored alongside other models instead of after them ([1.3](#13-simulate-dont-test-live)).
 
+**Quicker partial runs.** Scoring the FAR noise usually takes most of the run time, so while you're setting up a corpus or trying a different `--sv-threshold`, it can help to leave parts out:
+
+- `--skip-noise` scores FRR and IAR only. Run the noise once you're happy with the rest.
+- `--conditions clean` (or any list of condition folders) scores only those conditions. Conditions you leave out aren't scored at all, and the FRR and IAR for the conditions you include are exactly what a full run reports for them.
+
+Because enrolled models are reused, a quick run doesn't waste the enrollment work: a later full run with the same `--out` folder picks up the same models.
+
+**Progress display.** While models are being scored, the script shows one line of progress: the percentage of audio scored so far across all models, how many models have finished, elapsed time, and a rough estimate of the time remaining. The percentage is weighted by seconds of audio and updates while each `snsr-eval` job runs, so a long noise file doesn't make it look stuck. In a terminal the line updates in place; when output is redirected to a file, it prints a new line every 10% instead. Enrollment isn't counted in the percentage, so it stays at 0% until the first model starts scoring.
+
 ### 6.4 Reading the Output
 
 The script prints a table and writes the same numbers to `<out>/summary.csv`:
 
 ```
+enrolling spk1
+enrolling spk6
+scoring 100.0%  2/2 models  elapsed 00:27  remaining 00:00
+
 2 speakers, 0.01 h noise (0.01 model-hours), sv-threshold 0.49 (model default)
 
 condition               FRR              IAR   FA/day
@@ -475,7 +591,7 @@ snr10       25.00% (  1/4   )   0.00% (  0/4   )    0.000
 snr5        25.00% (  1/4   )   0.00% (  0/4   )    0.000
 ```
 
-(This is the actual output of the [Complete Walkthrough](#7-complete-walkthrough-windows-tnl-sdk-790) — a deliberately tiny two-speaker corpus built from the SDK's sample audio, so the percentages move in steps of 25% and aren't meaningful in themselves.)
+(This is the actual output of the [Complete Walkthrough](#7-complete-walkthrough-windows-tnl-sdk-790) — a deliberately tiny two-speaker corpus built from the SDK's sample audio, so the percentages move in steps of 25% and aren't meaningful in themselves. Your elapsed time will differ.)
 
 - **sv-threshold** — the threshold the models were scored at: the value stored in the enrolled models, or your `--sv-threshold` override. If the enrolled models store different values, all of them are listed.
 - **FRR** — false rejects ÷ target trials, for that condition.
@@ -636,6 +752,11 @@ python enrolled_benchmark.py run --sdk <sdk-root> \
 python enrolled_benchmark.py run --sdk <sdk-root> \
     --enroller <sdk-root>/model/udt-universal-3.67.1.0.snsr \
     --corpus my-corpus --out results -j 8 --sv-threshold 0.6
+
+# Quick check: clean condition only, no FAR noise
+python enrolled_benchmark.py run --sdk <sdk-root> \
+    --enroller <sdk-root>/model/udt-universal-3.67.1.0.snsr \
+    --corpus my-corpus --out results -j 8 --conditions clean --skip-noise
 ```
 
 ---

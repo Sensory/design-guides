@@ -38,7 +38,7 @@ How to create and use enrolled models with Sensory THF/TNL — training custom u
 
 ### [Benchmarking Enrolled Wake Word Models (FRR, IAR, FAR)](benchmarking-enrolled-models.md)
 
-How to measure the accuracy of enrolled wake word models: false reject rate (FRR), imposter accept rate (IAR), and false accepts per day (FAR). Covers how many speakers, recordings, and hours of noise you need, real vs. synthetic speakers, adding noise at fixed SNRs, and a Python script that enrolls every speaker with `spot-enroll` and scores each model against everyone's test audio and the noise with `snsr-eval`, at the model's own `sv-threshold` or an override. Also covers why simulation replaces live testing and how to read a zero-error result.
+How to measure the accuracy of enrolled wake word models: false reject rate (FRR), imposter accept rate (IAR), and false accepts per day (FAR). Covers how many speakers, recordings, and hours of noise you need, real vs. synthetic speakers, adding noise at fixed SNRs, and a Python script that enrolls every speaker with `spot-enroll` and scores each model against everyone's test audio and the noise with `snsr-eval`, at the model's own `sv-threshold` or an override, with a progress display and options for quicker partial runs. Also covers why simulation replaces live testing and how to read a zero-error result.
 
 **Applies to:** TrulyHandsfree (THF), TrulyNatural (TNL) SDKs — THF / TNL 7.8.0+ (examples on TNL 7.9.0)
 **Platform:** PC/workstation (Windows, Linux, or macOS) — simulation, not an on-device measurement
