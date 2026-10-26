@@ -3,7 +3,7 @@
 **Product:** TrulyHandsfree (THF) and TrulyNatural (TNL) SDKs  
 **Models:** Enrolled models produced by the enroller task models (`udt-*.snsr`, `eft-*.snsr`)  
 **Version:** THF / TNL 7.8.0+ (examples run on TNL 7.9.0)  
-**Document Version:** 1.1.0  
+**Document Version:** 1.2.0  
 **Last Modified:** 2026-10-26  
 **Audience:** Field Application Engineers, Customer Integration Engineers, external developers and integration partners  
 **Status:** Released
@@ -26,6 +26,7 @@
    - [3.4 Non-Target Audio for FAR](#34-non-target-audio-for-far)
    - [3.5 Real vs. Synthetic Speakers](#35-real-vs-synthetic-speakers)
    - [3.6 If You Must Record Over the Air](#36-if-you-must-record-over-the-air)
+   - [3.7 Audio Requirements](#37-audio-requirements)
 4. [Step 2 — Lay Out the Corpus](#4-step-2--lay-out-the-corpus)
 5. [Step 3 — Add Noise Conditions](#5-step-3--add-noise-conditions)
 6. [Step 4 — Enroll and Score Every Speaker](#6-step-4--enroll-and-score-every-speaker)
@@ -37,8 +38,9 @@
 8. [Step 5 — Interpreting Results](#8-step-5--interpreting-results)
    - [8.1 Choosing an sv-threshold](#81-choosing-an-sv-threshold)
    - [8.2 Recognition Sensitivity vs. Verification](#82-recognition-sensitivity-vs-verification)
-   - [8.3 Confidence When You See Zero Errors](#83-confidence-when-you-see-zero-errors)
-   - [8.4 Example: Synthetic 55-Speaker Results](#84-example-synthetic-55-speaker-results)
+   - [8.3 Confidence Intervals](#83-confidence-intervals)
+   - [8.4 Report Every Speaker](#84-report-every-speaker)
+   - [8.5 Example: Synthetic 55-Speaker Results](#85-example-synthetic-55-speaker-results)
 9. [Common Pitfalls](#9-common-pitfalls)
 10. [Quick Reference — Command Summary](#10-quick-reference--command-summary)
 11. [References](#11-references)
@@ -60,6 +62,8 @@ An enrolled model can fail in three distinct ways, and each needs its own test a
 | **False accept rate (FAR)** | How often does the model fire when nobody said the phrase? | Long recordings of non-target audio — conversation, TV, room noise | Each speaker's model against the noise audio, reported as **false accepts per day** |
 
 FRR and IAR are percentages of trials. FAR is a rate over time, so it's reported as false accepts per day (24 hours) of audio. Because every speaker's model listens to the same noise, the amount of audio tested is counted in **model-hours** (number of models × hours of noise), and FAR = false accepts ÷ model-hours × 24.
+
+**What counts as a day.** This guide counts all 24 hours of a day as noise, which is the stricter assumption. Most products spend part of the day somewhere quiet — overnight, for example — where false accepts almost never happen, so Sensory often reports FA/day assuming 16 hours of noise and 8 hours of quiet instead. A figure on that basis is two-thirds of the same figure on a 24-hour basis. Neither is wrong, but FA/day figures can only be compared when they use the same number of hours, so always state which one you used. The script prints it with the results, and `--noise-hours-per-day 16` switches to the 16-hour convention.
 
 These trade off against each other. Raising `sv-threshold` lowers IAR and FAR but raises FRR. Benchmark at the threshold the enrolled model ships with, and change it only if the results show a reason to — see [8.1](#81-choosing-an-sv-threshold).
 
@@ -100,9 +104,16 @@ Small tests are the most common benchmarking mistake. Testing with a handful of 
 | Speakers (each enrolls and records test audio) | 50 | 100 or more |
 | Enrollment recordings per speaker | 4 | 4 (match what your product will ask for) |
 | Test recordings per speaker | 10 | 20 |
-| Non-target audio for FAR | 2 hours | As much as you can — 24 hours or more |
+| Non-target audio for FAR (every model hears all of it) | 15 hours, for quick informal tests | 150 hours, for statistically accurate results |
 
 Because every speaker serves as an imposter for every other speaker, the number of imposter trials grows with the square of the speaker count: 50 speakers × 15 test recordings each gives 750 target trials but 36,750 imposter trials. More speakers is what improves IAR confidence the most.
+
+**Who the speakers are matters as much as how many.** Choose speakers who match the people the product is for:
+
+- **Accents and language.** Accent has a large effect on accuracy. For a US English product, use native speakers of US English in the mix of regional accents the product will meet. If the product must work for several accent groups, include enough speakers from each to report them separately.
+- **Gender and age.** Balance them to match the target users, which for most products means about half women and half men, across the adult age range.
+
+**One speaker is one speaker.** Don't create extra "speakers" by enrolling the same person several times from different subsets of their recordings. Those enrollments share one voice, so their results aren't independent, and counting them separately makes the benchmark look larger and more certain than it is. If you do enroll someone more than once, for example to see how much enrollment varies, average their results and count them as one speaker.
 
 ### 3.2 Enrollment Recordings
 
@@ -115,14 +126,31 @@ Each speaker also records **10–20 test recordings** of the same target phrase,
 To make the test recordings representative of how the product will actually be used:
 
 - Record them on a different day or in a different session from enrollment if possible, so they capture natural variation in the speaker's voice.
-- Vary distance, loudness, and direction the way real use will — for example, a laptop user may be at arm's length or across a desk. Sensory doesn't prescribe fixed distances or angles; match your product's use case, and record each distinct setup as its own condition (see [Step 2](#4-step-2--lay-out-the-corpus)) so you can compare them.
+- Record every speaker on the same device and microphone. Each speaker's test recordings also serve as imposter recordings for everyone else, and recordings from a different device are easier to tell apart from the enrolled speaker, which makes IAR look better than it is.
+- Vary the speaker's distance and direction from the microphone the way real use will — for example, a laptop user may be at arm's length or across a desk. Sensory doesn't prescribe fixed distances or angles; match your product's use case, and record each distinct setup as its own condition (see [Step 2](#4-step-2--lay-out-the-corpus)) so you can compare them.
+
+**Capture natural speech, not performed speech.** The test is only as realistic as the way people say the phrase. When someone uses a product, they're focused on what they want it to do, and they say the phrase naturally, as if talking to a person. Recording sessions easily produce something else:
+
+- **Don't ask speakers to change their voice.** Instructions like "now say it softer", "faster", or "slower" produce speech no one would use with a real device. Let loudness and speed vary naturally — for example with distance, or between sessions.
+- **Don't have them repeat the phrase over and over.** After a few repetitions in a row, people get bored and start saying it carelessly or with exaggerated variation. Mix the target phrase in among other prompts in random order, or have them say it followed by a different request each time, such as "Hey Sensory, what's the weather tomorrow?"
+- **Ask for the phrase without pauses between the words.** A pause inside the phrase raises the error rate considerably, and it's not how people say it in use.
+
+The same applies to enrollment: people tend to speak slowly and over-carefully when they know they're being recorded. Clear but natural speech gives the best enrolled model.
 - Cover noise by either recording in noisy conditions or — more commonly and more reproducibly — recording clean and **adding noise digitally afterwards** at fixed signal-to-noise ratios (see [Step 3](#5-step-3--add-noise-conditions)).
 
 ### 3.4 Non-Target Audio for FAR
 
-FAR audio is the easiest data to collect, since it doesn't need volunteers: any long recording of realistic sound that doesn't contain the target phrase works — conversations, TV and radio, music, room and household noise. The challenge is quantity. False accepts are rare events, so you need many hours of audio to see enough of them (or to be confident there are few — see [8.3](#83-confidence-when-you-see-zero-errors)). Use **at least 2 hours**; more is better.
+FAR audio is the easiest data to collect, since it doesn't need volunteers: any long recording of realistic sound that doesn't contain the target phrase works — conversations, TV and radio, music, room and household noise. The challenge is quantity. False accepts are rare events, so you need many hours of audio to see enough of them (or to be confident there are few — see [8.3](#when-you-see-zero-errors)):
 
-Screen the audio for the target phrase (and close soundalikes, if you want to keep them out) before using it — a genuine occurrence of the phrase in the noise would be scored as a false accept.
+- **15 hours** is the absolute minimum, and only for quick, informal tests where statistical significance isn't needed.
+- **150 hours** is what you need for statistically accurate results. It's also the amount Sensory evaluates each enrolled model on before delivering a model.
+- As a rule of thumb, evaluate every model on at least as many hours of noise as one false accept is allowed to take at your target rate. For example, a target of 0.05 FA/hour (1.2 FA/day, or one false accept per 20 hours) needs at least 20 hours of noise per model, and even that isn't enough to show the target is met with confidence.
+
+Every speaker's model is scored on all of the noise, so these amounts are hours of noise audio, not totals divided across models. Reusing the same noise across many models is what makes FAR testing of enrolled models practical, but it doesn't replace hours: 2 hours of noise heard by 50 models isn't the same as 100 hours of different noise.
+
+**Mix the noise types the product will hear.** FAR depends heavily on the kind of noise: it's usually higher on speech, TV, and radio than on car or fan noise. Use a mixture that reflects a typical day for the product, in roughly the proportions the product will hear each type. If you don't know the proportions, use equal amounts of each — for example office noise, babble (several people talking at once), car noise, household noise, single-speaker speech, and TV and radio. Speech, TV, and radio should be in the same language as the trigger phrase. Ideally, record the noise through the device's own microphone.
+
+Screen the audio for the target phrase (and close soundalikes, if you want to keep them out) before using it — a genuine occurrence of the phrase in the noise would be scored as a false accept. Don't record FAR noise in the office where the product is being developed, where people say the phrase while they work on it.
 
 ### 3.5 Real vs. Synthetic Speakers
 
@@ -135,7 +163,32 @@ Contact your Sensory FAE about synthetic data for your phrase.
 
 ### 3.6 If You Must Record Over the Air
 
-If the test audio has to be played back over the air into the device — for example, to capture it through the device's own microphones — play back **unmodified, clean recordings** through a loudspeaker that accurately reproduces a human voice (such as an artificial mouth or a head-and-torso simulator), not a generic speaker. A small consumer speaker colors the audio and can change the results. Capture what the device hears once, then score the captured audio in simulation ([1.3](#13-simulate-dont-test-live)).
+The best way to get audio through the device's own microphones and front end is to record speakers on the device directly. Playing recordings back over the air into the device instead looks convenient, but every step of the playback chain changes the audio, so avoid it unless the whole chain is designed for it:
+
+- **Start from high-quality originals.** Play back **unmodified, clean recordings** made with a good microphone — playback can only add distortion, never remove it.
+- **Use a loudspeaker that reproduces a human voice accurately**, such as an artificial mouth or a head-and-torso simulator, or at least studio monitors. A small consumer speaker colors the audio and changes the results.
+- **Control the room.** Playback adds much more background noise and reverberation than most people expect, so use an acoustically treated room.
+- **Set up the geometry carefully.** If the device's microphone is very close to or very far from the loudspeaker, unusual frequency effects show up in the captured audio. Place it the way a user's mouth would be.
+- **Verify the result.** Before adding any noise, listen to the original and captured recordings side by side and compare their spectrograms, to confirm the chain hasn't distorted the audio.
+
+Capture what the device hears once, then score the captured audio in simulation ([1.3](#13-simulate-dont-test-live)), and run `check` on it like any other recordings ([3.7](#37-audio-requirements)).
+
+### 3.7 Audio Requirements
+
+Enrollment and test recordings should be as close as possible to what the recognizer will hear on the device. Check them against this list before you benchmark; the script's `check` subcommand verifies the items marked ✓ ([Step 2](#4-step-2--lay-out-the-corpus)).
+
+| Requirement | Why |
+|---|---|
+| ✓ **16-bit PCM WAV, mono, 16 kHz** (or the model's sample rate) | The format the SDK models expect |
+| **Never upsample** audio recorded at a lower rate (such as 8 kHz) | The missing high frequencies can't be restored, and the model relies on them |
+| **No µ-law or lossy compression** (MP3, AAC, and so on), even as an intermediate step | Compression artifacts change what the model hears |
+| ✓ **At least 0.5 s of naturally recorded quiet before and after the phrase** | Enrollment and recognition use the audio around the phrase; padding must be real recorded background, not inserted silence |
+| **No editing or post-processing** — no trimming, splicing, noise reduction, automatic gain control, or level "cleanup" | Only controlled amounts of added noise ([Step 3](#5-step-3--add-noise-conditions)) should change the recordings |
+| ✓ **No runs of identical samples** (digital silence) | Never occurs on a real device, and skews results |
+| ✓ **No clipping**, at any gain stage between the microphone and the file | Clipping distorts the speech |
+| ✓ **A good recording level** — peaks using about 12–15 of the 16 bits (roughly −18 to −6 dBFS) | Too low loses detail, especially for soft talkers; too high risks clipping |
+| **A microphone with a flat response from 100 Hz to 8 kHz** — ideally the device's own microphone and audio path | A different microphone or front end changes the results |
+| **The same audio path for enrollment and recognition** — for a DSP target, the DSP's own channel | A mismatch between enrollment and test audio raises errors |
 
 ---
 
@@ -165,20 +218,67 @@ my-corpus/
 - **Condition folder names** under `test/` are free-form — `clean`, `snr20`, `arms-length`, `across-room` — and each is reported separately. Folders named `snrNN` sort from least to most noisy after `clean`.
 - Every speaker should have the same set of condition folders, so each condition has the same speakers behind it.
 
+**Check the recordings before you benchmark.** The script's `check` subcommand checks every enrollment and test recording against the audio requirements it can verify automatically ([3.7](#37-audio-requirements)):
+
+```bash
+python enrolled_benchmark.py check --corpus my-corpus
+```
+
+```
+speakers/spk012/enroll/002.wav: 8000 Hz, expected 16000 Hz
+speakers/spk012/test/clean/007.wav: 1 run(s) of identical samples, longest 200 ms of value 0 at 0.10 s
+speakers/spk031/test/clean/004.wav: clipped in 492 place(s)
+speakers/spk047/enroll/001.wav: peak level only -30 dBFS
+speakers/spk047/test/clean/012.wav: 0.20 s of quiet before the phrase and 1.27 s after; at least 0.5 s needed
+checked 1840 recordings
+  sample rate:        1 recording(s)
+  identical samples:  1 recording(s)
+  clipping:           1 recording(s)
+  low level:          1 recording(s)
+  short padding:      1 recording(s)
+```
+
+| Check | Flags a recording when |
+|---|---|
+| sample rate | It isn't at the expected rate (`--rate`, default 16000 Hz) |
+| identical samples | It has a run of identical sample values at least `--min-run-ms` long (default 10 ms) |
+| clipping | It has three or more full-scale samples in a row |
+| low level | Its loudest sample is below −18 dBFS (uses fewer than 12 bits) |
+| short padding | It has less than 0.5 s of quiet before or after the phrase. Checked on enrollment and `clean` test recordings only, since in noise there's no quiet to measure |
+
+**Identical samples** need a word of explanation. A real microphone always picks up a little noise, so even the quiet parts of a real recording change slightly from one sample to the next. Long runs of exactly the same value — usually zeros, "digital silence" — never happen on a device. They come from synthetic or edited audio, splicing, or dropped audio buffers, and they give the recognizer a perfectly silent background it will never hear in use. Adding noise hides the runs in the noisy conditions but not in `clean`, so a corpus with digital silence can show a *higher* FRR on clean audio than with light noise added.
+
+Fix flagged recordings at the source — re-record, re-capture, or regenerate them — rather than editing the audio, which breaks the "no editing" requirement. `check` also flags clipping in noisy conditions; if `noisify` output clips, the noise or speech is too loud for that SNR. `check` only reports problems; it doesn't stop a benchmark from running.
+
 ---
 
 ## 5. Step 3 — Add Noise Conditions
 
-To test in noise, mix noise into each clean test recording at fixed signal-to-noise ratios. Sensory typically uses **30, 20, 10, and 5 dB SNR**, but use whatever range matches your product. The script's `noisify` subcommand reads every `test/clean/*.wav` file, mixes in a random segment of a noise file at each SNR, and writes the results to `test/snr30/`, `test/snr20/`, and so on:
+To test in noise, mix noise into each clean test recording at fixed signal-to-noise ratios. Sensory typically uses **30, 20, 10, and 5 dBA SNR**, but use whatever range matches your product. The script's `noisify` subcommand reads every `test/clean/*.wav` file, mixes in a random segment of noise at each SNR, and writes the results to `test/snr30/`, `test/snr20/`, and so on:
 
 ```bash
-python enrolled_benchmark.py noisify --corpus my-corpus --noise babble.wav --snr 30,20,10,5
+python enrolled_benchmark.py noisify --corpus my-corpus --noise mix-noise --snr 30,20,10,5
 ```
 
-- The noise file must be 16-bit mono PCM at the same sample rate as the corpus, and longer than any test recording.
-- SNR is computed from the average power of the whole test recording, including any leading and trailing silence. Trim long silences from the test recordings first if you want SNR to reflect the speech alone.
-- The random noise segment is seeded, so re-running `noisify` reproduces the same noisy corpus.
-- Use a different noise recording here from the FAR noise in `noise/`, so the two tests stay independent.
+**Which noise to use.** `--noise` takes a folder of noise recordings (or a single file). For each test recording, `noisify` picks one file from the folder at random and mixes in a random segment of it. Use the same principles as for FAR noise ([3.4](#34-non-target-audio-for-far)):
+
+- **Use real recordings, mixed by type.** Put recordings of each noise type the product will hear in the folder — competing speakers, TV, radio, car, and so on. Files are picked in proportion to their length, so the mix follows how many hours of each type the folder holds. Agree the mix in advance with everyone comparing results, written for example as `{competing speaker 33%, TV 20%, radio 13%, car 34%}`.
+- **Avoid synthetic, steady noise.** White, pink, or brown noise — even filtered — has the same character from moment to moment. The recognizer's normalization removes that kind of noise easily, so results on it look better than they will in real life. Real noise changes over time, which is what makes it hard.
+- **Don't focus on extreme levels.** Results at very low SNRs say little about everyday use, and tuning settings to fix them usually makes IAR and FAR worse at typical levels.
+
+**How SNR is measured.** SNR should compare the level of the *speech* with the level of the noise. A test recording also contains silence before and after the phrase, and that silence has to stay in the file: enrollment and recognition both use the audio around the phrase, so trimming it would change the results. If the speech level were averaged over the whole file, the silence would pull it down, and a recording mixed at "5 dB" would really have a much higher SNR on the speech. `noisify` avoids this without any trimming:
+
+- **Speech level** is measured over the speech only. The recording is split into 20 ms frames, and only frames that are at least 15 dB above the recording's own background level (its quietest 10% of frames) and within 30 dB of its loudest frame are averaged. This approximates the *active speech level* of ITU-T P.56.
+- **Noise level** is measured over the whole noise segment that's mixed in, since the noise is present the whole time.
+- **Both levels are A-weighted**, so the SNR is in **dBA** (decibels with A-weighting). A-weighting reduces the contribution of very low frequencies, so the measured SNR is closer to how loud the noise sounds to a listener. Without it, noise with strong low-frequency content, such as car noise, measures as much louder than it sounds. The weighting is used only to measure the levels: the noise is mixed into the recording unweighted, and the recording keeps its natural silence.
+
+Other details:
+
+- Noise files must be 16-bit mono PCM at the same sample rate as the corpus. A file shorter than a test recording isn't used for that recording; at least one file must be longer than every test recording.
+- `noisify` writes `noisify-log.csv` in the corpus folder, listing which noise file and starting point went into each test recording, so you can trace a surprising result back to its noise.
+- The speech-level rule assumes the "clean" recordings really are quiet. If a recording's own background noise is less than about 15 dB below its speech, the rule can't separate the two well, and the SNR on the speech will be somewhat off. Recordings that noisy shouldn't be used as `clean` anyway.
+- The random choices are seeded, so re-running `noisify` with the same noise folder reproduces the same noisy corpus.
+- Use different noise recordings here from the FAR noise in `noise/`, and keep the folder outside the corpus folder, so the two tests stay independent.
 
 ---
 
@@ -221,6 +321,7 @@ Corpus layout (one target phrase per corpus):
   <corpus>/noise/*.wav                                non-target audio (optional)
 
 Subcommands:
+  check    check the recordings against the audio requirements
   noisify  mix noise into clean test recordings at fixed SNRs
   run      enroll every speaker, then score every model
 """
@@ -228,6 +329,7 @@ Subcommands:
 import argparse
 import array
 import csv
+import itertools
 import math
 import random
 import subprocess
@@ -264,19 +366,111 @@ def power(samples) -> float:
 
 # ---------------------------------------------------------------- noisify
 
+# A-weighting pole frequencies in Hz (IEC 61672). The analog response is
+#   s^4 / ((s + w1)^2 (s + w2) (s + w3) (s + w4)^2),  wN = 2 * pi * fN
+A_WEIGHT_POLES = (20.598997, 107.65265, 737.86223, 12194.217)
+
+
+def a_weight(samples, rate: int):
+    """A-weight a signal, as a cascade of six first-order filters.
+
+    The four high-pass sections use the bilinear transform. The two 12.2 kHz
+    low-pass poles lie above the Nyquist frequency at 16 kHz, where the bilinear
+    transform badly warps them, so they map directly to z-plane poles instead.
+    At 16 kHz this is within 0.7 dB of IEC 61672 up to 4 kHz and 2.5 dB up to 7.5 kHz.
+
+    Only used to measure levels: noisify compares the A-weighted power of speech
+    and noise, so the filter's overall gain cancels out and isn't normalized.
+    """
+    f1, f2, f3, f4 = A_WEIGHT_POLES
+    k = 2 * rate
+    sections = []                              # (b0, b1, a1) for each section
+    for f in (f1, f1, f2, f3):                 # high-pass: s / (s + w)
+        w = 2 * math.pi * f
+        b0 = k / (k + w)
+        sections.append((b0, -b0, (w - k) / (k + w)))
+    p = math.exp(-2 * math.pi * f4 / rate)     # low-pass: w / (s + w), twice
+    sections += [(1 - p, 0.0, -p)] * 2
+
+    out = [float(s) for s in samples]
+    for b0, b1, a1 in sections:
+        x1 = y1 = 0.0
+        for i, x in enumerate(out):
+            y1 = b0 * x + b1 * x1 - a1 * y1
+            x1 = x
+            out[i] = y1
+    return out
+
+
+def speech_frames(signal, rate: int, frame_ms: int = 20):
+    """Split a signal into frames and pick out the ones that hold speech.
+
+    Returns (frame length in samples, frame powers, indexes of speech frames).
+    A speech frame is at least 15 dB above the recording's background level (its
+    10th-percentile frame) and within 30 dB of its loudest frame. Used for both
+    the speech level in noisify and the padding check.
+    """
+    n = rate * frame_ms // 1000
+    frames = [power(signal[i:i + n]) for i in range(0, len(signal) - n + 1, n)]
+    if not frames or max(frames) == 0:
+        return n, frames, []
+    background = sorted(frames)[len(frames) // 10]
+    threshold = max(max(frames) * 10 ** (-30 / 10), background * 10 ** (15 / 10))
+    return n, frames, [i for i, p in enumerate(frames) if p >= threshold]
+
+
+def speech_power(weighted, rate: int) -> float:
+    """Average power over the speech frames only, so leading/trailing silence
+    doesn't count; this approximates the active speech level of ITU-T P.56."""
+    _, frames, speech = speech_frames(weighted, rate)
+    return sum(frames[i] for i in speech) / len(speech) if speech else 0.0
+
+
 def noisify(args) -> None:
     corpus = Path(args.corpus)
-    _, noise = read_pcm(Path(args.noise))
-    noise_power = power(noise)
+    source = Path(args.noise)
+    noise_files = sorted(source.glob("*.wav")) if source.is_dir() else [source]
+    if not noise_files:
+        sys.exit(f"no .wav files in {source}")
+    noise_info = {}                            # file -> (sample rate, length in samples)
+    for f in noise_files:
+        with wave.open(str(f)) as w:
+            if w.getsampwidth() != 2 or w.getnchannels() != 1:
+                sys.exit(f"{f}: expected 16-bit mono PCM")
+            noise_info[f] = (w.getframerate(), w.getnframes())
     rng = random.Random(0)  # fixed seed: the noisy corpus is reproducible
     snrs = [int(s) for s in args.snr.split(",")]
 
-    for clean in sorted(corpus.glob("speakers/*/test/clean/*.wav")):
+    cleans = sorted(corpus.glob("speakers/*/test/clean/*.wav"))
+    log = [["recording", "noise_file", "noise_start_s"]]
+    for k, clean in enumerate(cleans, 1):
         params, speech = read_pcm(clean)
-        start = rng.randrange(0, max(len(noise) - len(speech), 1))
-        segment = noise[start:start + len(speech)]
+        rate = params.framerate
+        usable = [f for f in noise_files
+                  if noise_info[f][0] == rate and noise_info[f][1] >= len(speech)]
+        if not usable:
+            sys.exit(f"no noise file at {rate} Hz is as long as {clean}")
+        # Pick a noise file with probability proportional to its length, so the
+        # mix of noise types follows how many hours of each the folder holds.
+        noise_file = usable[0] if len(usable) == 1 else \
+            rng.choices(usable, weights=[noise_info[f][1] for f in usable])[0]
+        start = rng.randrange(0, noise_info[noise_file][1] - len(speech) + 1)
+        with wave.open(str(noise_file)) as w:
+            w.setpos(start)
+            segment = array.array("h", w.readframes(len(speech)))
+        log.append([clean.relative_to(corpus).as_posix(), noise_file.name, f"{start / rate:.3f}"])
+
+        # SNR in dBA: A-weighted speech level over the loud frames only, against
+        # the A-weighted level of the noise segment actually mixed in. The audio
+        # itself is mixed unweighted, with its natural silence left in place.
+        p_speech = speech_power(a_weight(speech, rate), rate)
+        p_noise = power(a_weight(segment, rate))
+        if p_speech == 0 or p_noise == 0:
+            print(f"warning: {clean} or its noise segment is silent, skipping", file=sys.stderr)
+            continue
+
         for snr in snrs:
-            gain = math.sqrt(power(speech) / (noise_power * 10 ** (snr / 10)))
+            gain = math.sqrt(p_speech / (p_noise * 10 ** (snr / 10)))
             mixed = array.array("h", (
                 max(-32768, min(32767, int(s + gain * n)))
                 for s, n in zip(speech, segment)))
@@ -285,7 +479,94 @@ def noisify(args) -> None:
             with wave.open(str(out), "wb") as w:
                 w.setparams(params)
                 w.writeframes(mixed.tobytes())
-    print(f"wrote {', '.join(f'snr{s}' for s in snrs)} test conditions")
+        if sys.stdout.isatty():
+            print(f"\rnoisified {k}/{len(cleans)} recordings", end="", flush=True)
+    with open(corpus / "noisify-log.csv", "w", newline="", encoding="utf-8") as fh:
+        csv.writer(fh).writerows(log)
+    print(("\n" if sys.stdout.isatty() else "") +
+          f"wrote {', '.join(f'snr{s}' for s in snrs)} test conditions (SNR in dBA)"
+          f" and {corpus / 'noisify-log.csv'}")
+
+
+# ---------------------------------------------------------------- check
+
+FULL_SCALE = (-32768, 32767)
+
+
+def sample_runs(samples, rate: int, min_ms: float):
+    """Scan for runs of identical samples and for clipping, in one pass.
+
+    Returns (runs, clips): runs is (start seconds, length ms, value) for each run
+    of one value at least min_ms long; clips counts runs of 3 or more full-scale
+    samples. A real microphone always picks up some noise, so even a quiet
+    recording changes from sample to sample. Long runs of one value (usually 0)
+    are artificial: digital silence, splicing, or a dropped audio buffer.
+    """
+    runs, clips, pos = [], 0, 0
+    for value, group in itertools.groupby(samples):
+        n = sum(1 for _ in group)
+        if n * 1000 >= min_ms * rate:
+            runs.append((pos / rate, n * 1000 / rate, value))
+        if value in FULL_SCALE and n >= 3:
+            clips += 1
+        pos += n
+    return runs, clips
+
+
+def padding(samples, rate: int):
+    """Return (leading, trailing) seconds of quiet before and after the speech.
+
+    Uses noisify's speech-frame rule, but speech must last at least three frames
+    (60 ms) in a row, so a click at the start or end doesn't count as speech.
+    """
+    n, frames, speech = speech_frames(samples, rate)
+    marks = set(speech)
+    sustained = [i for i in speech if {i, i + 1, i + 2} <= marks]
+    if not sustained:
+        return 0.0, 0.0
+    return sustained[0] * n / rate, (len(samples) - (sustained[-1] + 3) * n) / rate
+
+
+def check(args) -> None:
+    corpus = Path(args.corpus)
+    files = sorted(corpus.glob("speakers/*/enroll/*.wav")) + \
+        sorted(corpus.glob("speakers/*/test/*/*.wav"))
+    tty = sys.stdout.isatty()
+    totals = {}
+    for k, f in enumerate(files, 1):
+        if tty:
+            print(f"\rchecking {k}/{len(files)} recordings", end="", flush=True)
+        params, samples = read_pcm(f)
+        rate = params.framerate
+        issues = []
+
+        if rate != args.rate:
+            issues.append(("sample rate", f"{rate} Hz, expected {args.rate} Hz"))
+        runs, clips = sample_runs(samples, rate, args.min_run_ms)
+        if runs:
+            start, ms, value = max(runs, key=lambda r: r[1])
+            issues.append(("identical samples", f"{len(runs)} run(s) of identical samples, "
+                           f"longest {ms:.0f} ms of value {value} at {start:.2f} s"))
+        if clips:
+            issues.append(("clipping", f"clipped in {clips} place(s)"))
+        peak = max((abs(s) for s in samples), default=0)
+        if 0 < peak < 4096:                    # under 12 bits of the 16 in use
+            issues.append(("low level", f"peak level only {20 * math.log10(peak / 32768):.0f} dBFS"))
+        # Padding only makes sense on clean audio: in noise, every frame is "loud".
+        if f.parent.name in ("enroll", "clean"):
+            lead, trail = padding(samples, rate)
+            if min(lead, trail) < 0.5:
+                issues.append(("short padding", f"{lead:.2f} s of quiet before the phrase "
+                               f"and {trail:.2f} s after; at least 0.5 s needed"))
+
+        if issues:
+            print(f"\r{f.relative_to(corpus).as_posix()}: " + "; ".join(t for _, t in issues))
+        for name, _ in issues:
+            totals[name] = totals.get(name, 0) + 1
+
+    print(f"\rchecked {len(files)} recordings" + (" " * 20 if tty else ""))
+    for name in ("sample rate", "identical samples", "clipping", "low level", "short padding"):
+        print(f"  {name + ':':<19} {totals.get(name, 0)} recording(s)")
 
 
 # ---------------------------------------------------------------- run
@@ -449,56 +730,119 @@ def run(args) -> None:
     with progress, ThreadPoolExecutor(max_workers=args.jobs) as pool:
         results = list(pool.map(score, speakers))
 
-    # tally[condition] = [target, fr, imposter, ia]
-    tally = {c: [0, 0, 0, 0] for c in conditions}
-    false_accepts = 0
+    # Per-speaker counts, so results can be recomputed for any resample of speakers.
+    n = len(speakers)
+    idx = {spk.name: k for k, spk in enumerate(speakers)}
+    n_files = {c: [0] * n for c in conditions}        # test recordings per speaker
+    for owner, cond, _ in tests:
+        n_files[cond][idx[owner]] += 1
+    false_rejects = {c: [0] * n for c in conditions}  # [model]
+    imposter_accepts = {c: [[0] * n for _ in range(n)] for c in conditions}  # [model][owner]
+    false_accepts = [0] * n                           # [model]
     model_thresholds = set()
 
     for name, threshold, counts in results:
+        k = idx[name]
         if threshold is not None:
             model_thresholds.add(threshold)
         for owner, cond, f in tests:
             hit = counts.get(str(f), 0) > 0
-            row = tally[cond]
             if owner == name:
-                row[0] += 1
-                row[1] += not hit
+                false_rejects[cond][k] += not hit
             else:
-                row[2] += 1
-                row[3] += hit
-        false_accepts += sum(counts.get(str(f), 0) for f in noise)
+                imposter_accepts[cond][k][idx[owner]] += hit
+        false_accepts[k] = sum(counts.get(str(f), 0) for f in noise)
+
+    def rates(weights):
+        """FRR and IAR (%) per condition, and FA/day, with speaker k counted weights[k] times."""
+        drawn = [(k, w) for k, w in enumerate(weights) if w]
+        frr, iar = {}, {}
+        for c in conditions:
+            files = n_files[c]
+            target = sum(w * files[k] for k, w in drawn)
+            fr = sum(w * false_rejects[c][k] for k, w in drawn)
+            # Every drawn model against every other drawn speaker's recordings.
+            all_files = sum(w * files[k] for k, w in drawn)
+            imposter = sum(w * (all_files - w * files[k]) for k, w in drawn)
+            ia = sum(w * sum(w2 * imposter_accepts[c][k][l] for l, w2 in drawn)
+                     for k, w in drawn)
+            frr[c] = 100 * fr / target if target else math.nan
+            iar[c] = 100 * ia / imposter if imposter else math.nan
+        hours = noise_hours * sum(weights)
+        fa = sum(w * false_accepts[k] for k, w in drawn)
+        fa_day = args.noise_hours_per_day * fa / hours if hours else math.nan
+        return frr, iar, fa_day
+
+    # Bootstrap 95% confidence intervals: resample whole speakers with replacement,
+    # since one speaker's recordings (and their model's results) aren't independent.
+    # Seeded, so the same results always give the same intervals.
+    rng = random.Random(0)
+    samples = []
+    for _ in range(args.bootstrap):
+        weights = [0] * n
+        for _ in range(n):
+            weights[rng.randrange(n)] += 1
+        samples.append(rates(weights))
+
+    def interval(values):
+        values = sorted(v for v in values if not math.isnan(v))
+        if not values:
+            return math.nan, math.nan
+        return (values[int(0.025 * (len(values) - 1))],
+                values[int(math.ceil(0.975 * (len(values) - 1)))])
 
     if args.sv_threshold is None:
         threshold = "/".join(sorted(model_thresholds)) + " (model default)"
     else:
         threshold = f"{args.sv_threshold} (override)"
-    model_hours = noise_hours * len(speakers)
-    fa_day = 24 * false_accepts / model_hours if model_hours else float("nan")
+    model_hours = noise_hours * n
+    frr, iar, fa_day = rates([1] * n)
+    fa_ci = interval([s[2] for s in samples])
+    show_ci = args.bootstrap > 0
+
+    def ci_txt(ci, fmt):
+        return f" [{ci[0]:{fmt}}-{ci[1]:{fmt}}]" if show_ci else ""
+
+    def ci_cols(ci, fmt):
+        return [f"{ci[0]:{fmt}}", f"{ci[1]:{fmt}}"] if show_ci else ["", ""]
 
     with open(out / "summary.csv", "w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
         writer.writerow(["sv_threshold", "condition", "target_trials", "false_rejects",
-                         "FRR_pct", "imposter_trials", "imposter_accepts", "IAR_pct",
-                         "false_accepts", "model_hours", "FA_per_day"])
+                         "FRR_pct", "FRR_ci_low", "FRR_ci_high",
+                         "imposter_trials", "imposter_accepts",
+                         "IAR_pct", "IAR_ci_low", "IAR_ci_high",
+                         "false_accepts", "model_hours", "noise_hours_per_day", "FA_per_day",
+                         "FA_ci_low", "FA_ci_high"])
         if args.skip_noise:
             noise_txt = "noise skipped"
         else:
             noise_txt = f"{noise_hours:.2f} h noise ({model_hours:.2f} model-hours)"
-        print(f"\n{len(speakers)} speakers, {noise_txt}, sv-threshold {threshold}\n")
-        print(f"{'condition':<10} {'FRR':>16} {'IAR':>16} {'FA/day':>8}")
+        print(f"\n{n} speakers, {noise_txt}, sv-threshold {threshold}")
+        if not args.skip_noise:
+            print(f"FA/day counts {args.noise_hours_per_day:g} hours of noise as one day")
+        if show_ci:
+            print(f"95% confidence intervals from {args.bootstrap} bootstrap resamples of speakers")
+        print()
+        width, fa_width = (34, 22) if show_ci else (16, 8)
+        print(f"{'condition':<10} {'FRR':>{width}} {'IAR':>{width}} {'FA/day':>{fa_width}}")
         for c in conditions:
-            n_t, fr, n_i, ia = tally[c]
-            frr = 100 * fr / n_t if n_t else float("nan")
-            iar = 100 * ia / n_i if n_i else float("nan")
+            n_t = sum(n_files[c])
+            fr = sum(false_rejects[c])
+            n_i = sum(n_files[c]) * (n - 1)
+            ia = sum(map(sum, imposter_accepts[c]))
+            frr_ci = interval([s[0][c] for s in samples])
+            iar_ci = interval([s[1][c] for s in samples])
             if args.skip_noise:
-                fa_cols, fa_txt = ["", "", ""], f"{'skipped':>8}"
+                fa_cols, fa_txt = [""] * 6, f"{'skipped':>8}"
             else:
-                fa_cols = [false_accepts, f"{model_hours:.2f}", f"{fa_day:.3f}"]
-                fa_txt = f"{fa_day:8.3f}"
-            writer.writerow([threshold, c, n_t, fr, f"{frr:.2f}", n_i, ia, f"{iar:.2f}",
-                             *fa_cols])
-            print(f"{c:<10} {frr:6.2f}% ({fr:>3}/{n_t:<4}) "
-                  f"{iar:6.2f}% ({ia:>3}/{n_i:<4}) {fa_txt}")
+                fa_cols = [sum(false_accepts), f"{model_hours:.2f}", f"{args.noise_hours_per_day:g}",
+                           f"{fa_day:.3f}", *ci_cols(fa_ci, ".3f")]
+                fa_txt = f"{fa_day:8.3f}" + ci_txt(fa_ci, ".3f")
+            writer.writerow([threshold, c, n_t, fr, f"{frr[c]:.2f}", *ci_cols(frr_ci, ".2f"),
+                             n_i, ia, f"{iar[c]:.2f}", *ci_cols(iar_ci, ".2f"), *fa_cols])
+            print(f"{c:<10} {frr[c]:6.2f}% ({fr:>3}/{n_t:<4}){ci_txt(frr_ci, '6.2f')} "
+                  f"{iar[c]:6.2f}% ({ia:>3}/{n_i:<4}){ci_txt(iar_ci, '6.2f')} {fa_txt}")
     print(f"\nwrote {out / 'summary.csv'}")
 
 
@@ -507,10 +851,19 @@ def main() -> None:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
 
+    p = sub.add_parser("check", help="check enroll/test recordings against the audio requirements")
+    p.add_argument("--corpus", required=True)
+    p.add_argument("--rate", type=int, default=16000,
+                   help="expected sample rate in Hz (default 16000)")
+    p.add_argument("--min-run-ms", type=float, default=10,
+                   help="report runs of identical samples at least this long (default 10)")
+    p.set_defaults(func=check)
+
     p = sub.add_parser("noisify", help="mix noise into test/clean at fixed SNRs")
     p.add_argument("--corpus", required=True)
-    p.add_argument("--noise", required=True, help="16-bit mono noise WAV, same rate as corpus")
-    p.add_argument("--snr", default="30,20,10,5", help="comma-separated SNRs in dB")
+    p.add_argument("--noise", required=True,
+                   help="folder of 16-bit mono noise WAVs (or one WAV), same rate as corpus")
+    p.add_argument("--snr", default="30,20,10,5", help="comma-separated SNRs in dBA")
     p.set_defaults(func=noisify)
 
     p = sub.add_parser("run", help="enroll and score every speaker")
@@ -524,6 +877,11 @@ def main() -> None:
                    help="comma-separated test conditions to score, e.g. clean,snr40 (default: all)")
     p.add_argument("--skip-noise", action="store_true",
                    help="don't score the FAR noise (FA columns left blank)")
+    p.add_argument("--noise-hours-per-day", type=float, default=24,
+                   help="hours of noise counted as one day for FA/day (default 24; "
+                        "Sensory often uses 16, assuming 8 quiet hours)")
+    p.add_argument("--bootstrap", type=int, default=1000,
+                   help="bootstrap resamples for 95%% confidence intervals (default 1000, 0 = off)")
     p.add_argument("-j", "--jobs", type=int, default=1,
                    help="number of speakers to enroll and score at once (default 1)")
     p.set_defaults(func=run)
@@ -554,15 +912,17 @@ python enrolled_benchmark.py run \
 | `--sv-threshold` | Optional. Overrides the `sv-threshold` stored in each enrolled model. Leave it off to benchmark the model as it ships |
 | `--conditions` | Optional. Comma-separated test conditions to score, such as `clean,snr20`. Leave it off to score every condition folder |
 | `--skip-noise` | Optional. Don't score the FAR noise. The FA columns are reported as `skipped` in the table and left blank in `summary.csv` |
+| `--noise-hours-per-day` | Hours of noise counted as one day for FA/day (default `24`). Use `16` to match Sensory's 16-hours-of-noise convention — see [1.1](#11-the-three-metrics) |
+| `--bootstrap` | Number of bootstrap resamples used for the 95% confidence intervals (default `1000`). `0` turns the intervals off — see [8.3](#83-confidence-intervals) |
 | `-j`, `--jobs` | Number of speakers to enroll and score at once (default `1`). Set it to about the number of CPU cores — see below |
 
 Enrolled models are saved to `<out>/models/<speaker>.snsr` and reused if they already exist, so you can re-run with `--sv-threshold` without re-enrolling. Delete `<out>/models/` to re-enroll — for example, after changing the enroller model or the enrollment recordings.
 
 Each run overwrites `<out>/summary.csv`, so copy it somewhere else first if you want to compare runs.
 
-Each speaker's model is evaluated against every test recording in the corpus and all of the FAR noise, so run time grows with the square of the number of speakers, plus the number of speakers × hours of noise. Enrollment adds a fixed cost per speaker, roughly 15 seconds each on a desktop PC with `udt-universal-3.67.1.0.snsr`. As a rough guide for scoring, one enrolled model processed an hour of audio in about 4 seconds on the same PC, so 24 hours of noise takes about 100 seconds per model, or about 85 minutes for 50 speakers with `-j 1`.
+Each speaker's model is evaluated against every test recording in the corpus and all of the FAR noise, so run time grows with the square of the number of speakers, plus the number of speakers × hours of noise. Enrollment adds a fixed cost per speaker, roughly 15 seconds each on a desktop PC with `udt-universal-3.67.1.0.snsr`. As a rough guide for scoring, one enrolled model processed an hour of audio in about 4 seconds on the same PC, so the recommended 150 hours of noise takes about 10 minutes per model, or about 8 hours for 50 speakers with `-j 1`. The 15-hour minimum takes about a minute per model.
 
-`-j` divides that time across CPU cores. Each job runs its own `spot-enroll` and `snsr-eval` processes for one speaker at a time, so set `-j` to about the number of cores on the machine. On an 8-core PC, a 16-speaker corpus with an hour of noise took 4 minutes 49 seconds with `-j 1` and 51 seconds with `-j 8`. The results are identical for any `-j` value: every model is still scored on exactly the same audio; it's just scored alongside other models instead of after them ([1.3](#13-simulate-dont-test-live)).
+`-j` divides that time across CPU cores. Each job runs its own `spot-enroll` and `snsr-eval` processes for one speaker at a time, so set `-j` to about the number of cores on the machine. On an 8-core PC, a 16-speaker corpus with an hour of noise took 4 minutes 49 seconds with `-j 1` and 51 seconds with `-j 8`, so the 8-hour, 50-speaker run above drops to roughly 1½ hours on such a machine. The results are identical for any `-j` value: every model is still scored on exactly the same audio; it's just scored alongside other models instead of after them ([1.3](#13-simulate-dont-test-live)).
 
 **Quicker partial runs.** Scoring the FAR noise usually takes most of the run time, so while you're setting up a corpus or trying a different `--sv-threshold`, it can help to leave parts out:
 
@@ -583,12 +943,14 @@ enrolling spk6
 scoring 100.0%  2/2 models  elapsed 00:27  remaining 00:00
 
 2 speakers, 0.01 h noise (0.01 model-hours), sv-threshold 0.49 (model default)
+FA/day counts 24 hours of noise as one day
+95% confidence intervals from 1000 bootstrap resamples of speakers
 
-condition               FRR              IAR   FA/day
-clean        0.00% (  0/4   )   0.00% (  0/4   )    0.000
-snr20       25.00% (  1/4   )   0.00% (  0/4   )    0.000
-snr10       25.00% (  1/4   )   0.00% (  0/4   )    0.000
-snr5        25.00% (  1/4   )   0.00% (  0/4   )    0.000
+condition                                 FRR                                IAR                 FA/day
+clean        0.00% (  0/4   ) [  0.00-  0.00]   0.00% (  0/4   ) [  0.00-  0.00]    0.000 [0.000-0.000]
+snr20       25.00% (  1/4   ) [  0.00- 50.00]   0.00% (  0/4   ) [  0.00-  0.00]    0.000 [0.000-0.000]
+snr10       25.00% (  1/4   ) [  0.00- 50.00]   0.00% (  0/4   ) [  0.00-  0.00]    0.000 [0.000-0.000]
+snr5        25.00% (  1/4   ) [  0.00- 50.00]   0.00% (  0/4   ) [  0.00-  0.00]    0.000 [0.000-0.000]
 ```
 
 (This is the actual output of the [Complete Walkthrough](#7-complete-walkthrough-windows-tnl-sdk-790) — a deliberately tiny two-speaker corpus built from the SDK's sample audio, so the percentages move in steps of 25% and aren't meaningful in themselves. Your elapsed time will differ.)
@@ -596,9 +958,12 @@ snr5        25.00% (  1/4   )   0.00% (  0/4   )    0.000
 - **sv-threshold** — the threshold the models were scored at: the value stored in the enrolled models, or your `--sv-threshold` override. If the enrolled models store different values, all of them are listed.
 - **FRR** — false rejects ÷ target trials, for that condition.
 - **IAR** — imposter accepts ÷ imposter trials, for that condition.
-- **FA/day** — false accepts in the noise audio ÷ model-hours × 24. FAR doesn't depend on the test condition, so it repeats on every row.
+- **FA/day** — false accepts in the noise audio ÷ model-hours × the hours counted as a day (24 unless you set `--noise-hours-per-day`; the line above the table says which). FAR doesn't depend on the test condition, so it repeats on every row.
+- **[low-high]** — the 95% confidence interval for each figure, from bootstrapping ([8.3](#83-confidence-intervals)). The true rate for this population of speakers is likely to be inside it. Leave the intervals off with `--bootstrap 0`.
 
-The raw counts are shown in parentheses — always look at them alongside the percentage, since `0.00% (0/4)` and `0.00% (0/4000)` mean very different things.
+The raw counts are shown in parentheses — always look at them alongside the percentage, since `0.00% (0/4)` and `0.00% (0/4000)` mean very different things. Here the snr20 interval of 0–50% shows how little two speakers can tell you.
+
+`summary.csv` has the same figures, with each interval in a pair of `_ci_low` and `_ci_high` columns.
 
 Even this toy run shows the expected pattern: noise raises FRR. Re-running the same corpus with `--sv-threshold 0.9` raises the clean FRR from 0% to 50% (2/4).
 
@@ -652,6 +1017,10 @@ There is no single right `sv-threshold`; it depends on what matters more for the
 - **Voice biometrics / security** — prioritize low IAR, and accept a higher FRR.
 - **Personalized wake word** ("respond to me, not the TV or my family") — prioritize low FRR and FAR, and accept a higher IAR.
 
+For security, also decide what an imposter is assumed to know. The benchmark measures the worst case: every imposter says the correct phrase. With a user-defined phrase, a stranger usually doesn't know it, so even a fairly high IAR still gives real protection against, say, a thief. Rejecting someone who knows the phrase needs a much lower IAR, and rejecting family members who know it — whose voices are often similar — needs a lower one still. With an enrolled-fixed phrase, everyone knows the phrase, which is one reason it isn't recommended for security ([Creating and Using Enrolled Models §3.2](enrolled-models.md#32-enrolled-fixed-enrollment)).
+
+**FAR grows with the number of enrolled users.** Each speaker's model in the benchmark holds one user. False accepts happen roughly independently for each enrollment, so a model that listens for two enrolled users has about twice the FAR of a single-user model, three users about three times, and so on. If your product enrolls several users in one model, multiply the benchmark's FA/day accordingly when you compare it with a target.
+
 Start with the `sv-threshold` stored in the enrolled model — the script uses it unless you pass `--sv-threshold`. If the results miss your targets, re-run the same corpus with `--sv-threshold` set higher (to lower IAR and FAR) or lower (to lower FRR), and compare. Change the value in small steps and keep each run's `summary.csv`. To see what threshold your enrolled model starts with, query it — always pass an audio file, since `snsr-eval` with no file listens to the live microphone and won't exit on its own:
 
 ```bash
@@ -675,9 +1044,25 @@ If FRR is too high even at a low `sv-threshold`, the recognition step is rejecti
 
 Recognition is speaker-biased on its own — the model was trained on one speaker's voice — so some imposters are rejected before verification runs, even at `sv-threshold=0`. Don't read IAR at threshold `0` as "IAR without biometrics."
 
-### 8.3 Confidence When You See Zero Errors
+### 8.3 Confidence Intervals
 
-A result of zero errors doesn't mean the true rate is zero — only that it's too small to observe with that much data. A useful rule of thumb (the "rule of three") gives the 95% upper bound when you see **zero** errors in N trials (or N model-days of noise): about **3 / N**.
+Every FRR, IAR, and FAR figure is an estimate from a sample of speakers, and a different set of speakers would give somewhat different numbers. The script shows how much they could vary with a 95% confidence interval for each figure, computed by **bootstrapping**:
+
+1. Draw a new set of speakers, the same size as the original, at random **with replacement** — some speakers are drawn more than once, others not at all.
+2. Recompute FRR, IAR, and FAR from just those speakers' results.
+3. Repeat 1,000 times (`--bootstrap`), and report the range that holds the middle 95% of the recomputed values.
+
+The script resamples whole **speakers**, not individual recordings, because one speaker's recordings and their model's results aren't independent of each other: a speaker who enrolled badly tends to have many false rejects at once. Resampling recordings would ignore that and give intervals that are too narrow. The resampling is seeded, so the same results always produce the same intervals, and it only takes a few seconds even for 100 speakers.
+
+Read the intervals alongside the figures:
+
+- **Wide intervals mean too few speakers.** If two products' or settings' intervals overlap heavily, the benchmark can't tell them apart; add speakers before drawing a conclusion.
+- **FAR intervals are usually the widest.** A handful of enrollments tend to cause most of the false accepts, so whether they're drawn swings the result a lot.
+- **Like the rule of three below, the intervals assume every model hears independent noise.** All models hear the same noise, so the FAR interval is optimistic.
+
+#### When You See Zero Errors
+
+A bootstrap interval can't help when there are no errors at all: every resample also has zero errors, so the interval is `[0.00-0.00]`, as in the walkthrough output. A result of zero errors doesn't mean the true rate is zero — only that it's too small to observe with that much data. A useful rule of thumb (the "rule of three") gives the 95% upper bound when you see **zero** errors in N trials (or N model-days of noise): about **3 / N**.
 
 | Observation | 95% upper bound |
 |---|---|
@@ -685,21 +1070,41 @@ A result of zero errors doesn't mean the true rate is zero — only that it's to
 | 0 imposter accepts in 750 trials | ≈ 3 / 750 = 0.4% IAR |
 | 0 false rejects in 100 trials | ≈ 3 / 100 = 3% FRR |
 
-Use this to decide whether you have enough data for the claim you want to make. For example, to show FAR is below 0.1 FA/day with zero observed false accepts, you need about 3 / 0.1 = 30 model-days (720 model-hours) of noise. With 50 speakers that's about 14.4 hours of noise audio; 2 hours (100 model-hours, 4.2 model-days) only shows FAR is below about 0.72 FA/day.
+Use this to decide whether you have enough data for the claim you want to make. For example, to show FAR is below 0.1 FA/day with zero observed false accepts, you need about 3 / 0.1 = 30 model-days (720 model-hours) of noise. With 50 speakers:
 
-### 8.4 Example: Synthetic 55-Speaker Results
+| Hours of noise | Model-days (50 models) | 95% upper bound with 0 false accepts |
+|---|---|---|
+| 2 | 4.2 | ≈ 0.72 FA/day |
+| 15 (minimum) | 31 | ≈ 0.096 FA/day |
+| 150 (recommended) | 312 | ≈ 0.0096 FA/day |
+
+Treat these bounds as optimistic. The rule of three assumes independent trials, but every model hears the same noise, so a stretch of noise that sounds like the phrase can trigger many models at once. That's another reason more hours of *different* noise matter more than more models listening to the same noise ([3.4](#34-non-target-audio-for-far)).
+
+### 8.4 Report Every Speaker
+
+It's tempting to drop the few speakers with the worst results — someone with a 40% FRR probably had a poor enrollment, and in real life they might simply enroll again. Removing them can make the headline numbers look much better. Don't do it:
+
+- **Real users don't always re-enroll.** Many people who have a bad experience decide the feature doesn't work and stop using it. Those users are part of what the product will deliver, so they belong in the results.
+- **Any cutoff is arbitrary.** Excluding the worst 5% instead of 10%, or every speaker above 30% FRR instead of 40%, changes the result, and the choice then has to be justified and reported alongside it. Results with different cutoffs can't be compared.
+- **The enrollment checks are the filter.** Enrollment already rejects recordings that are too noisy, clipped, or inconsistent ([Creating and Using Enrolled Models §4.1](enrolled-models.md#41-the-two-step-enrollment-process)). Every speaker who gets through enrollment is a speaker the product would accept, so report all of them, including those with a high FRR or FAR.
+
+This matters most for FAR. False accepts aren't spread evenly across enrollments: most models have very few, and a small number — often those with weaker enrollment recordings — have many. That's why FAR is reported as the mean over all models: it includes the few worst enrollments, which are the ones users notice, and leaving them out would hide exactly the problem FAR is meant to measure.
+
+If a few speakers dominate the errors, that's a finding worth reporting in its own right — look at their enrollment recordings to see what went wrong, and consider whether the product should guide users to re-enroll. The confidence intervals ([8.3](#83-confidence-intervals)) already reflect how much these speakers swing the result.
+
+### 8.5 Example: Synthetic 55-Speaker Results
 
 For reference, this is a benchmark of one enrolled wake word phrase on Sensory-generated **synthetic** speakers — 55 speakers, each with 4 enrollment recordings and its own test recordings, noise added digitally:
 
 | Test condition (SNR) | FRR | IAR |
 |---|---|---|
 | Clean | 9.83% | 3.07% |
-| 30 dB | 5.98% | 4.78% |
-| 20 dB | 5.98% | 5.16% |
-| 10 dB | 7.84% | 3.33% |
-| 5 dB | 13.94% | 1.88% |
+| 30 dBA | 5.98% | 4.78% |
+| 20 dBA | 5.98% | 5.16% |
+| 10 dBA | 7.84% | 3.33% |
+| 5 dBA | 13.94% | 1.88% |
 
-FAR was **0 false accepts over 110 model-hours** (55 models × a 2-hour conversational noise file) — under about 0.65 FA/day by the rule of three ([8.3](#83-confidence-when-you-see-zero-errors)).
+FAR was **0 false accepts over 110 model-hours** (55 models × a 2-hour conversational noise file) — under about 0.65 FA/day by the rule of three ([8.3](#when-you-see-zero-errors)). Two hours is well below the 15-hour minimum in [3.4](#34-non-target-audio-for-far), so this FAR is only a rough indication.
 
 Treat the IAR figures with caution: as described in [3.5](#35-real-vs-synthetic-speakers), a limited cloned-voice library can make synthetic speakers more alike than real ones, and real-speaker tests have shown IARs much closer to zero. This is exactly why a benchmark should include real speakers before the numbers are used for a product decision.
 
@@ -711,13 +1116,16 @@ Treat the IAR figures with caution: as described in [3.5](#35-real-vs-synthetic-
 - **Testing on enrollment recordings.** Scoring a model against the audio it was trained on makes FRR look artificially low ([3.3](#33-test-recordings)).
 - **Imposters saying a different phrase.** IAR measures other speakers saying the **same** target phrase. A different phrase is mostly rejected by the recognition step and makes IAR look better than it is — keep each corpus to one phrase.
 - **Target phrase in the FAR noise.** A genuine occurrence of the phrase in TV or conversation audio is counted as a false accept — screen the noise first ([3.4](#34-non-target-audio-for-far)).
+- **Digital silence in the recordings.** Runs of zero samples never occur on a real device and skew results, especially in the `clean` condition — run `check` before benchmarking ([Step 2](#4-step-2--lay-out-the-corpus)).
 - **Testing live instead of in simulation.** Live testing is slow, hard to repeat, and gives the same result as simulating the same audio ([1.3](#13-simulate-dont-test-live)).
-- **Over-the-air playback through a generic speaker.** Use clean, unmodified recordings through a speaker that accurately reproduces a human voice ([3.6](#36-if-you-must-record-over-the-air)).
+- **Over-the-air playback without a controlled chain.** A generic speaker, an untreated room, or awkward microphone placement distorts the audio; record on the device directly, or control and verify the whole playback chain ([3.6](#36-if-you-must-record-over-the-air)).
 - **Relying only on synthetic speakers.** Synthetic data may overstate IAR; confirm with real speakers ([3.5](#35-real-vs-synthetic-speakers)).
+- **Excluding the worst-performing speakers.** Every speaker who passes enrollment is a real user the product would accept; dropping the ones with the highest FRR or FAR flatters the results and makes them depend on an arbitrary cutoff ([8.4](#84-report-every-speaker)).
 - **Benchmarking with a different enroller than the product uses.** Results only carry over to the enroller model — and the enrollment settings, such as `req-enroll` and `accuracy` — that the device actually uses.
 - **Putting `-s` before `-t` on the `snsr-eval` command line.** `snsr-eval` rejects it with `ERROR: set -t task before -f or -s options` — the task must come first.
 - **Running `snsr-eval -q` with no audio file.** With no file, `snsr-eval` listens to the live microphone and runs until you press Ctrl-C ([8.1](#81-choosing-an-sv-threshold)).
-- **Reading "0 errors" as "0% error rate."** Check the rule-of-three bound before drawing conclusions ([8.3](#83-confidence-when-you-see-zero-errors)).
+- **Reading "0 errors" as "0% error rate."** Check the rule-of-three bound before drawing conclusions ([8.3](#when-you-see-zero-errors)).
+- **Comparing results without their confidence intervals.** A difference between two runs means little if their intervals overlap heavily ([8.3](#83-confidence-intervals)).
 
 ---
 
@@ -740,8 +1148,12 @@ snsr-eval -t spk1.snsr -v test-1.wav
 # Query a model's default sv-threshold (always pass an audio file)
 snsr-eval -t spk1.snsr -q sv-threshold test-1.wav
 
-# Add noise to every test/clean recording at 30/20/10/5 dB SNR
-python enrolled_benchmark.py noisify --corpus my-corpus --noise babble.wav --snr 30,20,10,5
+# Check enrollment and test recordings against the audio requirements
+python enrolled_benchmark.py check --corpus my-corpus
+
+# Add noise from a folder of real noise recordings to every test/clean recording
+# at 30/20/10/5 dBA SNR
+python enrolled_benchmark.py noisify --corpus my-corpus --noise mix-noise --snr 30,20,10,5
 
 # Enroll every speaker and score at each model's own sv-threshold
 python enrolled_benchmark.py run --sdk <sdk-root> \
